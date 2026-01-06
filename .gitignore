@@ -1,0 +1,10 @@
+# dbt
+target/
+dbt_packages/
+logs/
+.DS_Store
+
+# python / venv
+.venv/
+__pycache__/
+*.pyc
