@@ -1,0 +1,1 @@
+{{ count_grouped_records('sakila.rental', 'rental_id', 'customer_id') }}
