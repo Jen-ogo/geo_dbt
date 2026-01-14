@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: audit_geo_samples
+    columns:
+      - name: model_name
+        tests: [not_null, unique]
+      - name: row_count
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "row_count > 0"
+      - name: wkt_polygon_sample
+        tests: [not_null]
+      - name: wkt_point_sample
+        tests: [not_null]
