@@ -1,0 +1,41 @@
+geo_dbt:
+  target: dev_silver
+  outputs:
+    dev_bronze:
+      type: snowflake
+      account: rbfrwxq-vi72877
+      user: SNOWFLAKEGEO
+      password: 6hbdu3fUfuwgm3B
+      role: SYSADMIN
+      warehouse: COMPUTE_WH
+      database: GEO_PROJECT
+      schema: BRONZE                       
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: "dbt-geo"
+
+    dev_silver:
+      type: snowflake
+      account: rbfrwxq-vi72877         
+      user: SNOWFLAKEGEO               
+      password: 6hbdu3fUfuwgm3B
+      role: SYSADMIN             
+      warehouse: COMPUTE_WH
+      database: GEO_PROJECT
+      schema: SILVER                        
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: "dbt-geo"
+
+    dev_gold:
+      type: snowflake
+      account: rbfrwxq-vi72877
+      user: SNOWFLAKEGEO
+      password: 6hbdu3fUfuwgm3B
+      role: SYSADMIN
+      warehouse: COMPUTE_WH
+      database: GEO_PROJECT
+      schema: GOLD                      
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: "dbt-geo"

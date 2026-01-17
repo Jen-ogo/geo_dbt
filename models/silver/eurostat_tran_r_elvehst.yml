@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: siver.eurostat_tran_r_elvehst
+    columns:
+      - name: geo
+        tests: [not_null]
+      - name: year
+        tests: [not_null]
+      - name: vehicle
+        tests: [not_null]
+      - name: unit
+        tests: [not_null]
+      - name: freq
+        tests: [not_null]
+
+
+    tests:
+      # 1) ключ должен быть уникален после дедупа
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [geo, year, vehicle, unit, freq]
+
+      # 2) year должен быть разумным (подстрой при желании)
+      - dbt_utils.expression_is_true:
+          expression: "year between 1990 and 2100"
+
+      # 3) значения не должны быть отрицательными (обычно для счетчиков/процентов)
+      - dbt_utils.expression_is_true:
+          expression: "value is null or value >= 0"
+
+      # 4) ingest_ts/load_ts должны быть не пустые (если это гарантируется у тебя пайплайном)
+      - dbt_utils.expression_is_true:
+          expression: "ingest_ts is not null and load_ts is not null"
+      - dbt_utils.expression_is_true:
+          expression: "not (unit = 'PC' and value is not null) or (value between 0 and 100)"
+      - dbt_utils.expression_is_true:
+          expression: |
+            (
+              select max(cnt) from (
+                select geo, year, vehicle, count(distinct unit) as cnt
+                from {{ this }}
+                group by 1,2,3
+              )
+            ) <= 2

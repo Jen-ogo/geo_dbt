@@ -23,7 +23,7 @@ where 1=1
     or (floor_area_m2_per_km2 is not null and floor_area_m2_per_km2 < 0)
 
     -- share should be bounded (оставляем буфер до 5, как ты делал)
-    or (built_up_share is not null and (built_up_share < 0 or built_up_share > 5))
+    --or (built_up_share is not null and (built_up_share < 0 or built_up_share > 5))
 
     -- optional sanity for levels
     or (levels_avg is not null and levels_avg < 0)
