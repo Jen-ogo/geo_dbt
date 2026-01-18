@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: feat_h3_buildings_R10
+    description: "H3 r10 buildings features (counts/areas/densities) derived from SILVER.BUILDING_FOOTPRINTS_MODEL"
+
+    tests:
+      - not_empty
+      - dbt_utils.expression_is_true:
+          name: built_up_share_le_5_warn
+          expression: "built_up_share is null or built_up_share <= 5"
+          config:
+            severity: error
+            warn_if: "> 0"
+            error_if: ">= 1000"
+    columns:
+      - name: region_code
+        tests:
+          - not_null
+
+      - name: h3_r10
+        tests:
+          - not_null
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+
+      - name: buildings_cnt
+        tests:
+          - not_null
+
+      - name: last_load_ts
+        tests:
+          - not_null

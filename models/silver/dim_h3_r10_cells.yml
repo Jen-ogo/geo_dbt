@@ -1,0 +1,12 @@
+version: 2
+models:
+  - name: dim_h3_r10_cells
+    columns:
+      - name: region_code
+        tests: [not_null]
+      - name: h3_r10
+        tests: [not_null, unique]
+      - name: cell_wkt_4326
+        tests: [not_null]
+      - name: cell_center_wkt_4326
+        tests: [not_null]

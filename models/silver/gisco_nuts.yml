@@ -1,0 +1,74 @@
+version: 2
+
+models:
+  - name: gisco_nuts
+    description: "SILVER.GISCO_NUTS: GISCO NUTS boundaries (dedup + GEOGRAPHY). Grain: (level, cntr_code, nuts_id, year, scale, crs) latest by load_ts/source_file."
+    config:
+      contract:
+        enforced: false
+
+    columns:
+      - name: feature_id
+        description: "Stable key: NUTS:<year>:<scale>:<crs>:<level>:<nuts_id>"
+        tests:
+          - not_null
+          - unique
+
+      - name: nuts_id
+        tests: [not_null]
+
+      - name: cntr_code
+        tests: [not_null]
+
+      - name: level
+        tests: [not_null]
+
+      - name: year
+        tests: [not_null]
+
+      - name: scale
+        tests: [not_null]
+
+      - name: crs
+        tests: [not_null]
+
+      - name: geom_wkt_4326
+        description: "Raw WKT (EPSG:4326) from source, stored as STRING."
+        tests:
+          - not_null
+
+      - name: source_file
+        tests: [not_null]
+
+      - name: load_ts
+        tests: [not_null]
+        
+      - name: geog
+        description: "Parsed GEOGRAPHY (coalesce strict/allow)."
+        tests:
+          - not_null
+          # - dbt_utils.expression_is_true:
+          #     name: gisco_nuts__geog_valid
+          #     expression: "st_isvalid(geog)"
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - level
+            - cntr_code
+            - nuts_id
+            - year
+            - scale
+            - crs
+
+      - dbt_utils.expression_is_true:
+          name: gisco_nuts__level_between_0_and_3
+          expression: "level between 0 and 3"
+
+      - dbt_utils.expression_is_true:
+          name: gisco_nuts__geog_is_valid
+          expression: "st_isvalid(geog)"
+
+      - dbt_utils.expression_is_true:
+          name: gisco_nuts__geog_valid
+          expression: "st_isvalid(geog)"

@@ -1,0 +1,14 @@
+version: 2
+models:
+  - name: lau_degurba
+    columns:
+      - name: feature_id
+        tests: [not_null, unique]
+      - name: cntr_code
+        tests: [not_null]
+      - name: lau_id
+        tests: [not_null]
+      - name: year
+        tests: [not_null]
+      - name: geom_wkt_4326
+        tests: [not_null]
