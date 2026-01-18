@@ -1,0 +1,14 @@
+version: 2
+models:
+  - name: poi_points
+    columns:
+      - name: osm_id
+        tests: [not_null, unique]
+      - name: poi_class
+        tests: [not_null]
+      - name: poi_type
+        tests: [not_null]
+      - name: geom_wkt_4326
+        tests: [not_null]
+      - name: region_code
+        tests: [not_null]

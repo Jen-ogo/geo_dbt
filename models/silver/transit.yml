@@ -1,0 +1,21 @@
+version: 2
+models:
+  - name: transit_points
+    columns:
+      - name: osm_id
+        tests: [not_null, unique]
+      - name: geom_wkt_4326
+        tests: [not_null]
+      - name: region_code
+        tests: [not_null]
+
+  - name: transit_lines
+    columns:
+      - name: osm_id
+        tests: [not_null, unique]
+      - name: geom_wkt_4326
+        tests: [not_null]
+      - name: region_code
+        tests: [not_null]
+      - name: line_class
+        tests: [not_null]

@@ -1,0 +1,19 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: GEO_PROJECT
+    schema: BRONZE
+    tables:
+      - name: EUROSTAT_TRAN_R_ELVEHST
+      - name: GISCO_NUTS
+      - name: EUROSTAT_LAU_DEGURBA
+      - name: ADMIN
+      - name: CHARGING
+      - name: POI_POINTS
+      - name: POI_POLYGONS
+      - name: PT_POINTS
+      - name: PT_LINES
+      - name: ROADS
+      - name: BUILDINGS_ACTIVITY
+      - name: CENSUS_GRID_2021_EUROPE

@@ -1,8 +1,0 @@
-version: 2
-
-sources:
-  - name: bronze
-    database: GEO_PROJECT
-    schema: BRONZE
-    tables:
-      - name: EUROSTAT_TRAN_R_ELVEHST

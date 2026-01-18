@@ -1,0 +1,14 @@
+version: 2
+models:
+  - name: activity_places
+    columns:
+      - name: feature_id
+        tests: [not_null, unique]
+      - name: region_code
+        tests: [not_null]
+      - name: geom_wkt_4326
+        tests: [not_null]
+      - name: activity_class
+        tests: [not_null]
+      - name: activity_type_lc
+        tests: [not_null]

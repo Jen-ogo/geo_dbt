@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: siver.eurostat_tran_r_elvehst
+  - name: eurostat_tran_r_elvehst
     columns:
       - name: geo
         tests: [not_null]

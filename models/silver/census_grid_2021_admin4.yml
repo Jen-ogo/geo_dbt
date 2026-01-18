@@ -1,0 +1,14 @@
+version: 2
+models:
+  - name: census_grid_2021_admin4
+    columns:
+      - name: grid_id
+        tests: [not_null, unique]
+      - name: admin4_osm_id
+        tests: [not_null]
+      - name: admin4_region_code
+        tests: [not_null]
+      - name: h3_r10
+        tests: [not_null]
+      - name: cell_wkt_4326
+        tests: [not_null]
