@@ -1,14 +1,101 @@
 version: 2
+
 models:
   - name: activity_places
+    description: >
+      Cleaned and deduplicated OSM activity/building polygons (from BRONZE.BUILDINGS_ACTIVITY).
+      One row per OSM feature (node/way) with normalized activity_class and activity_type_lc.
+      Geometry is stored as GEOGRAPHY (geog) plus a debug WKT column (geom_wkt_4326).
+      Grain: 1 row per feature_id (latest by load_ts, then source_file).
+      
+
+    config:
+      materialized: dynamic_table
+
+    tests:
+      - rowcount_gt_0
+      - osm_id_or_way_id_present
+
+      # WKT must look like a valid WKT
+      - dbt_utils.expression_is_true:
+          name: activity_places__wkt_has_geometry_prefix
+          expression: >
+            geom_wkt_4326 ilike 'POLYGON(%'
+            or geom_wkt_4326 ilike 'MULTIPOLYGON(%'
+            or geom_wkt_4326 ilike 'POINT(%'
+            or geom_wkt_4326 ilike 'LINESTRING(%'
+
+      # ensure geog exists whenever WKT exists
+      - dbt_utils.expression_is_true:
+          name: activity_places__geog_present_when_wkt_present
+          expression: >
+            (geom_wkt_4326 is null) or (geog is not null)
+
+      # region_code sanity
+      - dbt_utils.expression_is_true:
+          name: activity_places__region_code_not_empty
+          expression: "region_code is not null and trim(region_code) <> ''"
+
     columns:
       - name: feature_id
-        tests: [not_null, unique]
-      - name: region_code
-        tests: [not_null]
-      - name: geom_wkt_4326
-        tests: [not_null]
+        description: >
+          Stable feature identifier derived from OSM ids: 'N' || osm_id or 'W' || osm_way_id.
+          This is the deduplication key in SILVER.
+        tests:
+          - not_null
+          - unique
+
+      - name: osm_id
+        description: "OSM node id (if the feature originates from node). Nullable if it's a way."
+      - name: osm_way_id
+        description: "OSM way id (if the feature originates from a way). Nullable if it's a node."
+
+      - name: name
+        description: "OSM name tag. Empty strings normalized to NULL."
+
+      - name: name_en
+        description: "OSM name:en extracted from other_tags JSON (if present)."
+
       - name: activity_class
-        tests: [not_null]
+        description: >
+          High-level bucket derived from OSM tags (amenity/shop/office/tourism/leisure/sport/craft/building).
+          Used for feature engineering.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['amenity','shop','office','tourism','leisure','sport','craft','building']
+
       - name: activity_type_lc
-        tests: [not_null]
+        description: >
+          Normalized activity type (lowercased) from the first non-null of amenity/shop/office/tourism/leisure/sport/craft/building.
+          This is the main downstream category field.
+        tests:
+          - not_null
+
+      - name: geog
+        description: "Snowflake GEOGRAPHY representation of geometry. Built from BRONZE geom_wkt."
+        tests:
+          - not_null
+
+      - name: geom_wkt_4326
+        description: >
+          Debug WKT (EPSG:4326) derived from geog via ST_ASWKT. Mandatory debug column for geo QA.
+        tests:
+          - not_null
+          # WKT validation
+          - wkt_not_empty
+
+      - name: region_code
+        description: "Ingest region identifier (e.g. 'poland', 'germany'). Used for partitioning / clustering."
+        tests:
+          - not_null
+
+      - name: source_file
+        description: "Raw source file name / path used for lineage and tie-breaking in dedup."
+        tests:
+          - not_null
+
+      - name: load_ts
+        description: "Ingest/load timestamp (NTZ). Used for dedup ordering."
+        tests:
+          - not_null

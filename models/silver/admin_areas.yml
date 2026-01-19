@@ -1,0 +1,112 @@
+version: 2
+
+models:
+  - name: admin_areas
+    description: |
+      Canonical OSM administrative boundaries layer (Silver).
+      This model ingests raw OSM admin features from BRONZE.ADMIN, parses `other_tags` into JSON,
+      normalizes key attributes, converts WKT geometry into Snowflake GEOGRAPHY, and keeps the latest
+      record per 'osm_id' using 'load_ts/source_file' ordering.
+
+      Grain: 1 row per OSM admin feature ('osm_id') - latest snapshot.
+      Geometry:
+        - geog: Snowflake GEOGRAPHY (EPSG:4326)
+        - geom_wkt_4326: WKT representation for debugging/inspection
+
+    config:
+      materialized: dynamic_table
+
+    columns:
+      - name: feature_id
+        description: "Stable feature key derived from OSM id: 'A' || osm_id."
+        tests:
+          - not_null
+          - unique
+
+      - name: osm_id
+        description: "OSM relation/node id representing the administrative boundary feature."
+        tests:
+          - not_null
+          - unique
+
+      - name: name
+        description: "Local name from OSM 'name' tag (nullable)."
+
+      - name: name_en
+        description: "English name extracted from other_tags JSON (name:en) when present."
+
+      - name: admin_level
+        description: |
+          OSM admin_level as integer (e.g., 2=country, 4=region/voivodeship, etc.).
+          This is a core dimension used for joining other datasets (LAU, NUTS mapping, etc.).
+        tests:
+          - not_null
+
+      - name: boundary
+        description: "OSM boundary tag; typically 'administrative' for admin objects. Can be null for edge cases."
+        tests:
+          - values_in_or_null:
+              name: admin_areas__boundary_in_allowlist_or_null
+              values: ['administrative']
+
+      - name: population
+        description: "Population value parsed from tags:population when present (nullable)."
+
+      - name: population_date
+        description: "Population reference date parsed from tags:population:date when present (nullable)."
+
+      - name: type
+        description: "OSM 'type' column (relation/way semantics from source extract)."
+
+      - name: tags
+        description: "Parsed JSON from OSM other_tags (key-value map)."
+
+      - name: other_tags_raw
+        description: "Original raw other_tags string from OSM extract."
+
+      - name: geom
+        description: |
+          Optional GEOMETRY mirror created from geom_wkt.
+          Typically not used for analytics; kept for debugging/interop.
+
+      - name: geog
+        description: "Primary geometry in Snowflake GEOGRAPHY (EPSG:4326)."
+        tests:
+          - not_null
+
+      - name: geom_wkt_4326
+        description: |
+          WKT geometry in EPSG:4326 derived from `geog`.
+          Mandatory debug column for geo QA: used for sampling and sanity checks.
+        tests:
+          - not_null
+          - wkt_not_empty
+
+      - name: region_code
+        description: |
+          Region code / ingestion partition label (e.g., 'poland', 'germany', etc.).
+          Used to scope downstream features by region.
+        tests:
+          - not_null
+
+      - name: source_file
+        description: "Ingested source file identifier (lineage/debug)."
+        tests:
+          - not_null
+
+      - name: load_ts
+        description: "Load timestamp for the record (used for dedup ordering)."
+        tests:
+          - not_null
+
+
+    tests:
+      # -------- Required checks for geo tables --------
+      - rowcount_gt_0:
+          name: admin_areas__rowcount_gt_0
+
+      # -------- Additional sanity checks --------
+      - wkt_prefix_in:
+          name: admin_areas__wkt_prefix_ok
+          column_name: geom_wkt_4326
+          prefixes: ["POLYGON", "MULTIPOLYGON"]
