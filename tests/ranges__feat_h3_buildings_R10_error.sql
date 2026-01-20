@@ -22,7 +22,7 @@ where 1=1
     or (footprint_m2_per_km2 is not null and footprint_m2_per_km2 < 0)
     or (floor_area_m2_per_km2 is not null and floor_area_m2_per_km2 < 0)
 
-    -- share should be bounded (оставляем буфер до 5, как ты делал)
+    -- share should be bounded 
     --or (built_up_share is not null and (built_up_share < 0 or built_up_share > 5))
 
     -- optional sanity for levels
