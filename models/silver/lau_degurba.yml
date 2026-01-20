@@ -1,14 +1,117 @@
 version: 2
+
 models:
   - name: lau_degurba
+    description: >
+      Eurostat LAU + DEGURBA enrichment (SILVER). Source: BRONZE.EUROSTAT_LAU_DEGURBA.
+      Grain: (cntr_code, lau_id, year) with latest record kept by (load_ts desc, source_file desc).
+      Geometry is stored as:
+        - geom_wkt_raw (raw input WKT from source)
+        - geog (GEOGRAPHY parsed via wkt_to_geog strict/allow fallback)
+        - geom_wkt_4326 (debug WKT derived from geog)
+      Includes DEGURBA class (degurba) and basic metadata fields.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: lau_degurba__rowcount_gt_0
+
     columns:
       - name: feature_id
-        tests: [not_null, unique]
+        description: "Stable key: LAU:<cntr_code>:<lau_id>:<year>."
+        tests:
+          - not_null
+          - unique
+
+      - name: gisco_id
+        description: "GISCO identifier from source (nullable depending on dataset)."
+
       - name: cntr_code
-        tests: [not_null]
+        description: "Country code (e.g., PL, DE)."
+        tests:
+          - not_null
+
       - name: lau_id
-        tests: [not_null]
+        description: "LAU identifier within a country."
+        tests:
+          - not_null
+
+      - name: lau_name
+        description: "LAU name from source (nullable)."
+
+      - name: degurba
+        description: >
+          DEGURBA class (Degree of Urbanisation). Expected to be a small integer class.
+          Note: allow nulls if source doesn't provide it for some records.
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: ['0', '1', '2', '3', '9']
+              config:
+                name: lau_degurba__degurba_in_1_2_3_or_null
+
+      - name: fid
+        description: "Source feature id (numeric)."
+
       - name: year
-        tests: [not_null]
+        description: "Reference year of the dataset."
+        tests:
+          - not_null
+
+      - name: geom_wkt_raw
+        description: "Raw WKT from source (string)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_raw
+              config:
+                name: lau_degurba__geom_wkt_raw_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_raw
+                prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: lau_degurba__geom_wkt_raw_polygonal_prefix
+
+      - name: geog
+        description: "Parsed GEOGRAPHY geometry (WGS84)."
+        tests:
+          - not_null
+          - geog_is_polygonal:
+              arguments:
+                column_name: geog
+              config:
+                name: lau_degurba__geog_is_polygonal
+
       - name: geom_wkt_4326
-        tests: [not_null]
+        description: "WKT representation derived from geog (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: geom_wkt_4326
+              config:
+                name: lau_degurba__geom_wkt_4326_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: geom_wkt_4326
+                prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: lau_degurba__geom_wkt_4326_polygonal_prefix
+
+      - name: is_valid
+        description: "Result of ST_ISVALID(geog) computed in-model (boolean)."
+        tests:
+          - not_null
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests:
+          - not_null
+
+      - name: load_ts
+        description: "Ingestion/load timestamp used for deduplication."
+        tests:
+          - not_null

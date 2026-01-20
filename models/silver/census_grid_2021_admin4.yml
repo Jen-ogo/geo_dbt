@@ -1,14 +1,134 @@
 version: 2
+
 models:
   - name: census_grid_2021_admin4
+    description: >
+      Eurostat Census Grid 2021 cells (1km grid) enriched with ADMIN level 4 attribution.
+      Grid cell WKT is parsed into GEOGRAPHY (EPSG:4326), centroid point is computed, H3 R10 assigned,
+      and each cell is spatially joined to the containing admin4 polygon (OSM ADMIN level=4).
+      Deduplicated by grid_id (latest load_ts/source_file wins).
+
+    tests:
+      - rowcount_gt_0:
+          name: census_grid_2021_admin4__rowcount_gt_0
+
     columns:
       - name: grid_id
-        tests: [not_null, unique]
-      - name: admin4_osm_id
-        tests: [not_null]
-      - name: admin4_region_code
-        tests: [not_null]
-      - name: h3_r10
-        tests: [not_null]
+        description: "Unique census grid cell identifier (Eurostat grd_id)."
+        tests:
+          - not_null
+          - unique
+
+      - name: pop_total
+        description: "Total population in the grid cell (NULL when source had -9999)."
+        tests:
+          - non_negative:
+              name: census_grid_2021_admin4__pop_total_non_negative
+
+      - name: pop_male
+        description: "Male population in the grid cell (NULL when source had -9999)."
+        tests:
+          - non_negative:
+              name: census_grid_2021_admin4__pop_male_non_negative
+
+      - name: pop_female
+        description: "Female population in the grid cell (NULL when source had -9999)."
+        tests:
+          - non_negative:
+              name: census_grid_2021_admin4__pop_female_non_negative
+
+      - name: pop_age_lt15
+        description: "Population age <15 (NULL when source had -9999)."
+        tests:
+          - non_negative:
+              name: census_grid_2021_admin4__pop_age_lt15_non_negative
+
+      - name: pop_age_1564
+        description: "Population age 15-64 (NULL when source had -9999)."
+        tests:
+          - non_negative:
+              name: census_grid_2021_admin4__pop_age_1564_non_negative
+
+      - name: pop_age_ge65
+        description: "Population age 65+ (NULL when source had -9999)."
+        tests:
+          - non_negative:
+              name: census_grid_2021_admin4__pop_age_ge65_non_negative
+
+      - name: emp_total
+        description: "Total employed population (NULL when source had -9999)."
+        tests:
+          - non_negative:
+              name: census_grid_2021_admin4__emp_total_non_negative
+
+      - name: land_surface
+        description: "Land surface area for the cell (as provided by source)."
+        tests:
+          - non_negative:
+              name: census_grid_2021_admin4__land_surface_non_negative
+
+      - name: populated
+        description: "Binary flag from source (0/1). NULL when source had -9999)."
+        tests:
+          - values_in_or_null:
+              name: census_grid_2021_admin4__populated_is_0_1_or_null
+              values: [0, 1]
+
+      - name: cell_geog
+        description: "Cell polygon as GEOGRAPHY parsed from input WKT."
+        tests:
+          - not_null
+          - geog_is_polygonal:
+              name: census_grid_2021_admin4__cell_geog_is_polygonal
+              column_name: cell_geog
+
+      - name: cell_pt
+        description: "Centroid of the cell polygon as GEOGRAPHY point."
+        tests:
+          - not_null
+          - geog_is_point:
+              name: census_grid_2021_admin4__cell_pt_is_point
+              column_name: cell_pt
+
       - name: cell_wkt_4326
-        tests: [not_null]
+        description: "WKT representation of cell_geog (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              name: census_grid_2021_admin4__cell_wkt_not_empty
+              column_name: cell_wkt_4326
+          - wkt_prefix_any:
+              name: census_grid_2021_admin4__cell_wkt_is_poly_or_mpoly
+              column_name: cell_wkt_4326
+              prefixes: ['POLYGON', 'MULTIPOLYGON']
+
+      - name: admin4_osm_id
+        description: "OSM admin4 feature id assigned via spatial join."
+        tests:
+          - not_null
+
+      - name: admin4_name
+        description: "Admin4 name from OSM boundary relation."
+
+      - name: admin4_region_code
+        description: "Region/country code for the admin4 feature."
+        tests:
+          - not_null
+
+      - name: h3_r10
+        description: "H3 resolution 10 cell id derived from cell centroid."
+        tests:
+          - not_null
+          - is_h3_hex:
+              name: census_grid_2021_admin4__h3_r10_is_h3_hex
+              column_name: h3_r10
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests:
+          - not_null
+
+      - name: load_ts
+        description: "Ingestion timestamp used for deduplication."
+        tests:
+          - not_null

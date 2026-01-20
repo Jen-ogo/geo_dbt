@@ -2,18 +2,80 @@ version: 2
 
 models:
   - name: eurostat_tran_r_elvehst
+    description: >
+      Eurostat dataset TRAN_R_ELVEHST (road electric vehicles stock).
+      Canonicalized and deduplicated by (geo, year, vehicle, unit, freq) keeping the latest
+      ingest_ts/load_ts/snapshot/source_file.
+      Materialized as a dynamic table and clustered by (geo, year, vehicle).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: eurostat_tran_r_elvehst__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [geo, year, vehicle, unit, freq]
+          config:
+            name: eurostat_tran_r_elvehst__uk_geo_year_vehicle_unit_freq
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "year between 1990 and 2100"
+          config:
+            name: eurostat_tran_r_elvehst__year_range
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "ingest_ts is not null and load_ts is not null"
+          config:
+            name: eurostat_tran_r_elvehst__ingest_and_load_ts_present
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "not (unit = 'PC' and value is not null) or (value between 0 and 100)"
+          config:
+            name: eurostat_tran_r_elvehst__pc_value_0_100
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: |
+              (
+                select max(cnt) from (
+                  select geo, year, vehicle, count(distinct unit) as cnt
+                  from {{ this }}
+                  group by 1,2,3
+                )
+              ) <= 2
+          config:
+            name: eurostat_tran_r_elvehst__units_per_geo_year_vehicle_le_2
+
     columns:
       - name: geo
-        tests: [not_null]
-      - name: year
-        tests: [not_null]
-      - name: vehicle
-        tests: [not_null]
-      - name: unit
-        tests: [not_null]
-      - name: freq
+        description: "Geographical code (Eurostat geo)."
         tests: [not_null]
 
+      - name: year
+        description: "Reference year."
+        tests: [not_null]
+
+      - name: vehicle
+        description: "Vehicle category."
+        tests: [not_null]
+
+      - name: unit
+        description: "Unit of measure."
+        tests: [not_null]
+
+      - name: freq
+        description: "Frequency code."
+        tests: [not_null]
+
+      - name: value
+        description: "Metric value (stock/count-like). Expected to be non-negative when present."
+        tests:
+          - non_negative:
+              config:
+                name: eurostat_tran_r_elvehst__value_non_negative
 
     tests:
      

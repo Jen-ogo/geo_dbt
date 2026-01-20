@@ -2,10 +2,148 @@ version: 2
 
 models:
   - name: ev_chargers
+    description: >
+      Canonical OSM EV charging points (amenity=charging_station) from BRONZE.CHARGING.
+      Parses OSM other_tags into JSON, normalizes key attributes (operator, fee, capacity, socket counts),
+      converts raw WKT geometry into Snowflake GEOGRAPHY (EPSG:4326) and exposes debug WKT.
+      Deduplicated by osm_id (latest load_ts/source_file wins).
+
+    tests:
+      - rowcount_gt_0:
+          name: ev_chargers__rowcount_gt_0
+
     columns:
+      - name: feature_id
+        description: "Stable feature key for OSM node charging point: 'N<osm_id>'."
+        tests:
+          - not_null
+          - unique
+
       - name: osm_id
-        tests: [not_null, unique]
-      - name: region_code
-        tests: [not_null]
+        description: "OSM node id of the charging station."
+        tests:
+          - not_null
+          - unique
+
+      - name: name
+        description: "Charging station name from OSM name tag (nullable)."
+
+      - name: name_en
+        description: "English name from OSM tag name:en (nullable)."
+
+      - name: amenity
+        description: >
+          OSM amenity tag from other_tags. In practice can be 'charging_station' and also
+          'device_charging_station', 'bicycle_parking', 'parking', 'charging-station','construction','proposed'
+        tests:
+          - values_in_or_null:
+              column_name: amenity
+              values:
+                - charging_station
+                - charging-station
+                - device_charging_station
+                - bicycle_parking
+                - parking
+                - construction
+                - proposed
+              config:
+                name: ev_chargers__amenity_allowlist_or_null
+
+      - name: operator
+        description: "Charging operator from OSM tag operator (nullable)."
+
+      - name: fee_bool
+        description: >
+          Normalized boolean from OSM tag fee. true for yes/true/1, false for no/false/0, else NULL.
+        tests:
+          - values_in_or_null:
+              name: ev_chargers__fee_bool_is_boolean_or_null
+              column_name: fee_bool
+              values: [true, false]
+
+      - name: capacity
+        description: "Capacity parsed from OSM tag capacity (nullable)."
+        tests:
+          - non_negative:
+              name: ev_chargers__capacity_non_negative
+
+      - name: socket_type2_cnt
+        description: "Parsed integer socket:type2 count (nullable)."
+        tests:
+          - non_negative:
+              name: ev_chargers__socket_type2_non_negative
+
+      - name: socket_chademo_cnt
+        description: "Parsed integer socket:chademo count (nullable)."
+        tests:
+          - non_negative:
+              name: ev_chargers__socket_chademo_non_negative
+
+      - name: socket_type2_combo_cnt
+        description: "Parsed integer socket:type2_combo count (nullable)."
+        tests:
+          - non_negative:
+              name: ev_chargers__socket_type2_combo_non_negative
+
+      - name: total_sockets_cnt
+        description: "Derived total sockets count across known socket types."
+        tests:
+          - non_negative:
+              name: ev_chargers__total_sockets_non_negative
+
+      - name: has_dc
+        description: "Derived flag: true when DC sockets exist (chademo or type2_combo), else NULL."
+        tests:
+          - values_in_or_null:
+              name: ev_chargers__has_dc_is_boolean_or_null
+              column_name: has_dc
+              values: [true, false]
+
+      - name: has_ac
+        description: "Derived flag: true when AC sockets exist (type2), else NULL."
+        tests:
+          - values_in_or_null:
+              name: ev_chargers__has_ac_is_boolean_or_null
+              column_name: has_ac
+              values: [true, false]
+
+      - name: ref_eu_evse
+        description: "EU EVSE reference id (ref:EU:EVSE) if present (nullable)."
+
+      - name: ref_eu_evse_pool
+        description: "EU EVSE pool reference id (ref:EU:EVSE:pool) if present (nullable)."
+
+      - name: geog
+        description: "Snowflake GEOGRAPHY point parsed from raw WKT (WGS84)."
+        tests:
+          - not_null
+          - geog_is_point:
+              name: ev_chargers__geog_is_point
+              column_name: geog
+
       - name: geom_wkt_4326
-        tests: [not_null]
+        description: "WKT representation of geog (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              name: ev_chargers__geom_wkt_not_empty
+              column_name: geom_wkt_4326
+          - wkt_prefix_any:
+              name: ev_chargers__geom_wkt_prefix_point
+              column_name: geom_wkt_4326
+              prefixes: ['POINT']
+
+      - name: region_code
+        description: "Region/country code from ingestion (e.g., 'poland')."
+        tests:
+          - not_null
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests:
+          - not_null
+
+      - name: load_ts
+        description: "Ingestion/load timestamp used for deduplication."
+        tests:
+          - not_null
