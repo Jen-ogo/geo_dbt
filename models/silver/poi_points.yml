@@ -1,14 +1,104 @@
 version: 2
+
 models:
   - name: poi_points
+    description: >
+      Canonical POI points (nodes) built from OSM-derived source POI_POINTS.
+      Each record is typed into poi_class / poi_type based on tags JSON, enriched with
+      address attributes, parsed into GEOGRAPHY (WGS84) and exported to WKT for debug.
+      Deduplicated by osm_id (latest load_ts/source_file wins).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: poi_points__rowcount_gt_0
+
     columns:
+      - name: feature_id
+        description: "Stable POI feature key for nodes: 'N<osm_id>'."
+        tests:
+          - not_null
+          - unique
+
       - name: osm_id
-        tests: [not_null, unique]
+        description: "OSM node id."
+        tests:
+          - not_null
+          - unique
+
+      - name: name
+        description: "OSM name tag (if present). Nullable."
+
+      - name: addr_housenumber
+        description: "Address house number from tags (addr:housenumber). Nullable."
+      - name: addr_street
+        description: "Address street from tags (addr:street). Nullable."
+      - name: addr_postcode
+        description: "Address postcode from tags (addr:postcode). Nullable."
+      - name: addr_city_or_place
+        description: "Address city or place from tags (addr:city / addr:place). Nullable."
+
       - name: poi_class
-        tests: [not_null]
+        description: >
+          High-level POI category inferred from which tag family is present
+          (amenity/shop/tourism/leisure/office/craft/man_made/emergency/public_transport/railway/highway/place).
+        tests:
+          - not_null
+          - values_in_or_null:
+              values:
+                ["amenity","shop","tourism","leisure","office","craft","man_made","emergency","public_transport","railway","highway","place"]
+              config:
+                name: poi_points__poi_class_in_allowlist_or_null
+
       - name: poi_type
-        tests: [not_null]
+        description: "Specific POI type value taken from tags (e.g., amenity=restaurant, shop=supermarket)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: poi_type
+              config:
+                name: poi_points__poi_type_not_empty
+
+      - name: geog
+        description: "POI point geometry as Snowflake GEOGRAPHY (WGS84)."
+        tests:
+          - not_null
+          - geog_is_point:
+              column_name: geog
+              config:
+                name: poi_points__geog_is_point
+
       - name: geom_wkt_4326
-        tests: [not_null]
+        description: "WKT representation of geog (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: geom_wkt_4326
+              config:
+                name: poi_points__geom_wkt_4326_not_empty
+          - wkt_prefix_any:
+              column_name: geom_wkt_4326
+              prefixes: ["POINT"]
+              config:
+                name: poi_points__geom_wkt_4326_prefix_point
+
+      - name: tags
+        description: "Parsed JSON from other_tags. Nullable."
+
+      - name: other_tags_raw
+        description: "Raw OSM other_tags string. Nullable."
+
       - name: region_code
-        tests: [not_null]
+        description: "Region/country code from ingestion (e.g., poland, germany)."
+        tests:
+          - not_null
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests:
+          - not_null
+
+      - name: load_ts
+        description: "Ingestion/load timestamp used for deduplication."
+        tests:
+          - not_null

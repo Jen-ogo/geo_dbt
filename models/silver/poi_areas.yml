@@ -1,14 +1,100 @@
 version: 2
+
 models:
   - name: poi_areas
+    description: >
+      Canonical POI polygons (areas) built from OSM-derived source POI_POLYGONS.
+      Each record is classified into a high-level poi_class and poi_type.
+      Geometry is parsed into GEOGRAPHY (WGS84) and exported to WKT for debug.
+      Deduplicated by feature_id (latest load_ts/source_file wins).
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: poi_areas__rowcount_gt_0
+
+      # model-level: requires at least one of (osm_id, osm_way_id)
+      - osm_id_or_way_id_present:
+          config:
+            name: poi_areas__osm_id_or_way_id_present
+
     columns:
       - name: feature_id
-        tests: [not_null, unique]
+        description: >
+          Stable POI feature key. Prefer OSM node id when present, otherwise derived from OSM way id.
+        tests:
+          - not_null
+          - unique
+
+      - name: osm_id
+        description: "OSM node id when the POI originates from a node. Nullable."
+
+      - name: osm_way_id
+        description: "OSM way id when the POI originates from a way. Nullable."
+
+      - name: name
+        description: "OSM name tag (if present). Nullable."
+
       - name: poi_class
-        tests: [not_null]
+        description: >
+          High-level POI category inferred from which OSM tag is present
+          (amenity/shop/tourism/office/leisure/sport/building/landuse).
+        tests:
+          - not_null
+          - values_in_or_null:
+              values: ["amenity","shop","tourism","office","leisure","sport","building","landuse"]
+              config:
+                name: poi_areas__poi_class_in_allowlist_or_null
+
       - name: poi_type
-        tests: [not_null]
+        description: "Specific POI type value (e.g., amenity=restaurant, shop=supermarket)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: poi_type
+              config:
+                name: poi_areas__poi_type_not_empty
+
+      - name: geog
+        description: "POI polygon as Snowflake GEOGRAPHY (WGS84)."
+        tests:
+          - not_null
+          - geog_is_polygonal:
+              column_name: geog
+              config:
+                name: poi_areas__geog_is_polygonal
+
       - name: geom_wkt_4326
-        tests: [not_null]
+        description: "WKT representation of geog (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: geom_wkt_4326
+              config:
+                name: poi_areas__geom_wkt_4326_not_empty
+          - wkt_prefix_any:
+              column_name: geom_wkt_4326
+              prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: poi_areas__geom_wkt_4326_prefix_poly_or_mpoly
+
       - name: region_code
-        tests: [not_null]
+        description: "Region/country code from ingestion (e.g., poland, germany)."
+        tests:
+          - not_null
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests:
+          - not_null
+
+      - name: load_ts
+        description: "Ingestion/load timestamp used for deduplication."
+        tests:
+          - not_null
+
+      - name: tags
+        description: "Parsed JSON from other_tags. Nullable."
+
+      - name: other_tags_raw
+        description: "Raw OSM other_tags string. Nullable."
