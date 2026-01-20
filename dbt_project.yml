@@ -22,3 +22,14 @@ models:
       +schema: SILVER
     gold:
       +schema: GOLD
+
+
+data_tests:
+  geo_dbt:
+    +store_failures: false
+# ONLY data_tests (not tests) in dbt >= 1.8/1.9+
+# data_tests:
+#   geo_dbt:
+#     +store_failures: true
+#     +database: GEO_PROJECT
+#     +schema: DBT_TEST__AUDIT
