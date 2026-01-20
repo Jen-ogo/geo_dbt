@@ -18,6 +18,37 @@ models:
           config:
             name: eurostat_tran_r_elvehst__uk_geo_year_vehicle_unit_freq
 
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "year between 1990 and 2100"
+          config:
+            name: eurostat_tran_r_elvehst__year_range
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "ingest_ts is not null and load_ts is not null"
+          config:
+            name: eurostat_tran_r_elvehst__ingest_and_load_ts_present
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "not (unit = 'PC' and value is not null) or (value between 0 and 100)"
+          config:
+            name: eurostat_tran_r_elvehst__pc_value_0_100
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: |
+              (
+                select max(cnt) from (
+                  select geo, year, vehicle, count(distinct unit) as cnt
+                  from {{ this }}
+                  group by 1,2,3
+                )
+              ) <= 2
+          config:
+            name: eurostat_tran_r_elvehst__units_per_geo_year_vehicle_le_2
+
     columns:
       - name: geo
         description: "Geographical code (Eurostat geo)."
