@@ -31,4 +31,13 @@ dedup as (
     order by ingest_ts desc, load_ts desc, snapshot desc, source_file desc
   ) = 1
 )
-select * from dedup
+select
+  md5(
+    coalesce(geo,'') || '|' ||
+    coalesce(year::string,'') || '|' ||
+    coalesce(vehicle,'') || '|' ||
+    coalesce(unit,'') || '|' ||
+    coalesce(freq,'')
+  ) as record_id,
+  *
+from dedup

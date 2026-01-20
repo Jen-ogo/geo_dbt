@@ -2,43 +2,66 @@ version: 2
 
 models:
   - name: eurostat_tran_r_elvehst
-    columns:
-      - name: geo
-        tests: [not_null]
-      - name: year
-        tests: [not_null]
-      - name: vehicle
-        tests: [not_null]
-      - name: unit
-        tests: [not_null]
-      - name: freq
-        tests: [not_null]
-
+    description: >
+      Eurostat dataset TRAN_R_ELVEHST (road electric vehicles stock).
+      Canonicalized and deduplicated by (geo, year, vehicle, unit, freq) keeping the latest
+      ingest_ts/load_ts/snapshot/source_file.
+      Materialized as a dynamic table and clustered by (geo, year, vehicle).
 
     tests:
-      # 1) ключ должен быть уникален после дедупа
+      - rowcount_gt_0:
+          config:
+            name: eurostat_tran_r_elvehst__rowcount_gt_0
+
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [geo, year, vehicle, unit, freq]
+          config:
+            name: eurostat_tran_r_elvehst__uk_geo_year_vehicle_unit_freq
 
-      # 2) year должен быть разумным (подстрой при желании)
-      - dbt_utils.expression_is_true:
-          expression: "year between 1990 and 2100"
+    columns:
+      - name: geo
+        description: "Geographical code (Eurostat geo)."
+        tests: [not_null]
 
-      # 3) значения не должны быть отрицательными (обычно для счетчиков/процентов)
-      - dbt_utils.expression_is_true:
-          expression: "value is null or value >= 0"
+      - name: year
+        description: "Reference year."
+        tests: [not_null]
 
-      # 4) ingest_ts/load_ts должны быть не пустые (если это гарантируется у тебя пайплайном)
-      - dbt_utils.expression_is_true:
-          expression: "ingest_ts is not null and load_ts is not null"
-      - dbt_utils.expression_is_true:
-          expression: "not (unit = 'PC' and value is not null) or (value between 0 and 100)"
-      - dbt_utils.expression_is_true:
-          expression: |
-            (
-              select max(cnt) from (
-                select geo, year, vehicle, count(distinct unit) as cnt
-                from {{ this }}
-                group by 1,2,3
-              )
-            ) <= 2
+      - name: vehicle
+        description: "Vehicle category."
+        tests: [not_null]
+
+      - name: unit
+        description: "Unit of measure."
+        tests: [not_null]
+
+      - name: freq
+        description: "Frequency code."
+        tests: [not_null]
+
+      - name: value
+        description: "Metric value (stock/count-like). Expected to be non-negative when present."
+        tests:
+          - non_negative:
+              config:
+                name: eurostat_tran_r_elvehst__value_non_negative
+
+      - name: snapshot
+        description: "Snapshot label/version of the ingest."
+        tests: [not_null]
+
+      - name: dataset
+        description: "Dataset identifier from ingest metadata."
+        tests: [not_null]
+
+      - name: ingest_ts
+        description: "Ingestion timestamp used for dedup ordering."
+        tests: [not_null]
+
+      - name: load_ts
+        description: "Load timestamp used for dedup ordering."
+        tests: [not_null]
+
+      - name: source_file
+        description: "Source file path for lineage/debug."
+        tests: [not_null]

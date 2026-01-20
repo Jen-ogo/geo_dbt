@@ -10,6 +10,7 @@ with src as (
     {{ osm_tags_json('b.other_tags') }} as tags
   from {{ source('bronze','CHARGING') }} b
   where b.osm_id is not null
+    and lower( ({{ osm_tags_json('b.other_tags') }}):"amenity"::string ) = 'charging_station'
 ),
 
 base as (
