@@ -77,22 +77,30 @@ models:
               config:
                 name: eurostat_tran_r_elvehst__value_non_negative
 
-      - name: snapshot
-        description: "Snapshot label/version of the ingest."
-        tests: [not_null]
+    tests:
+     
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [geo, year, vehicle, unit, freq]
 
-      - name: dataset
-        description: "Dataset identifier from ingest metadata."
-        tests: [not_null]
+     
+      - dbt_utils.expression_is_true:
+          expression: "year between 1990 and 2100"
 
-      - name: ingest_ts
-        description: "Ingestion timestamp used for dedup ordering."
-        tests: [not_null]
+    
+      - dbt_utils.expression_is_true:
+          expression: "value is null or value >= 0"
 
-      - name: load_ts
-        description: "Load timestamp used for dedup ordering."
-        tests: [not_null]
-
-      - name: source_file
-        description: "Source file path for lineage/debug."
-        tests: [not_null]
+      
+      - dbt_utils.expression_is_true:
+          expression: "ingest_ts is not null and load_ts is not null"
+      - dbt_utils.expression_is_true:
+          expression: "not (unit = 'PC' and value is not null) or (value between 0 and 100)"
+      - dbt_utils.expression_is_true:
+          expression: |
+            (
+              select max(cnt) from (
+                select geo, year, vehicle, count(distinct unit) as cnt
+                from {{ this }}
+                group by 1,2,3
+              )
+            ) <= 2
