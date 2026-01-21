@@ -1,0 +1,259 @@
+version: 2
+
+models:
+  - name: feat_h3_roads_r10
+    description: >
+      H3 R10 roads feature mart.
+      Aggregates road segments into the H3 resolution 10 grid to produce compact,
+      ML-ready road-network intensity features for EV charging planning (and other location
+      optimization tasks).
+
+      Source:
+      - SILVER.ROAD_SEGMENTS (OSM roads) with filtering (drivable classes, access restrictions)
+        and normalized attributes (oneway, lit, lanes, maxspeed, bridge/tunnel).
+      - H3 cell geometry is carried as debug WKT + area for downstream spatial QA.
+
+      Grain: (region_code, h3_r10) — exactly one row per H3 cell per region_code.
+
+      Key metrics:
+      - road_segments_cnt and road_length_m_sum (total network intensity)
+      - length sums by highway group (motorway/trunk/primary/secondary/tertiary/residential/service)
+      - lanes and maxspeed distribution summaries (avg, p50, p90)
+      - oneway_share and lit_share as proportions of segments in the cell
+      - bridge_cnt / tunnel_cnt
+      - density normalizations per km² (per cell area)
+
+      Data-quality philosophy (GOLD):
+      - Structural constraints are strict (keys, geometry WKT format, H3 format, rowcount).
+      - “Business” anomalies (shares slightly outside [0,1], negative lanes due to OSM noise) are WARN,
+        and become ERROR only if they explode (>=1000 failing rows), so the pipeline stays resilient.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_roads_r10__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10]
+          config:
+            name: feat_h3_roads_r10__uk_region_h3
+
+      # Shares sanity (regulated strictness): warn on any outliers; fail only on explosion.
+      - num_between_or_null:
+          column_name: oneway_share
+          min_value: 0
+          max_value: 1
+          config:
+            name: feat_h3_roads_r10__oneway_share_0_1_warn
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+      - num_between_or_null:
+          column_name: lit_share
+          min_value: 0
+          max_value: 1
+          config:
+            name: feat_h3_roads_r10__lit_share_0_1_warn
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+    columns:
+      - name: region_code
+        description: "Region/country code used across the project (e.g. poland, germany)."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 cell index at resolution 10."
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_roads_r10__h3_r10_is_hex
+
+      - name: cell_area_m2
+        description: "Area of the H3 cell boundary (m²)."
+        tests:
+          - not_null
+          - num_gt_0:
+              config:
+                name: feat_h3_roads_r10__cell_area_m2_gt_0
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary as WKT polygon (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: feat_h3_roads_r10__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POLYGON(", "MULTIPOLYGON("]
+              config:
+                name: feat_h3_roads_r10__cell_wkt_prefix_polygonal
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center point as WKT POINT (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: feat_h3_roads_r10__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POINT("]
+              config:
+                name: feat_h3_roads_r10__cell_center_wkt_prefix_point
+
+      - name: road_segments_cnt
+        description: "Number of road segments contributing to the cell."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__road_segments_cnt_non_negative
+
+      - name: road_length_m_sum
+        description: "Total road length (meters) in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__road_length_m_sum_non_negative
+
+      - name: motorway_length_m_sum
+        description: "Total motorway length (meters) in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__motorway_length_m_sum_non_negative
+
+      - name: trunk_length_m_sum
+        description: "Total trunk length (meters) in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__trunk_length_m_sum_non_negative
+
+      - name: primary_length_m_sum
+        description: "Total primary road length (meters) in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__primary_length_m_sum_non_negative
+
+      - name: secondary_length_m_sum
+        description: "Total secondary road length (meters) in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__secondary_length_m_sum_non_negative
+
+      - name: tertiary_length_m_sum
+        description: "Total tertiary road length (meters) in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__tertiary_length_m_sum_non_negative
+
+      - name: residential_length_m_sum
+        description: "Total residential road length (meters) in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__residential_length_m_sum_non_negative
+
+      - name: service_length_m_sum
+        description: "Total service road length (meters) in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__service_length_m_sum_non_negative
+
+      - name: lanes_avg
+        description: "Average lanes across segments (nullable if lanes missing)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__lanes_avg_non_negative_warn
+                severity: warn
+                warn_if: "> 0"
+                error_if: ">= 1000"
+
+      - name: lanes_p50
+        description: "Median lanes across segments (approx; nullable if lanes missing)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__lanes_p50_non_negative_warn
+                severity: warn
+                warn_if: "> 0"
+                error_if: ">= 1000"
+
+      - name: maxspeed_kph_avg
+        description: "Average maxspeed (km/h) across segments (nullable if unknown)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__maxspeed_kph_avg_non_negative_warn
+                severity: warn
+                warn_if: "> 0"
+                error_if: ">= 1000"
+
+      - name: maxspeed_kph_p50
+        description: "Median maxspeed (km/h) across segments (approx)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__maxspeed_kph_p50_non_negative_warn
+                severity: warn
+                warn_if: "> 0"
+                error_if: ">= 1000"
+
+      - name: maxspeed_kph_p90
+        description: "90th percentile maxspeed (km/h) across segments (approx)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__maxspeed_kph_p90_non_negative_warn
+                severity: warn
+                warn_if: "> 0"
+                error_if: ">= 1000"
+
+      - name: oneway_share
+        description: "Share of segments tagged as oneway in the cell (0..1)."
+
+      - name: lit_share
+        description: "Share of segments with lit=yes in the cell (0..1)."
+
+      - name: bridge_cnt
+        description: "Count of bridge segments in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__bridge_cnt_non_negative
+
+      - name: tunnel_cnt
+        description: "Count of tunnel segments in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__tunnel_cnt_non_negative
+
+      - name: road_segments_per_km2
+        description: "Segments density per km² (road_segments_cnt normalized by cell area)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__road_segments_per_km2_non_negative
+
+      - name: road_length_m_per_km2
+        description: "Road length density per km²."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_roads_r10__road_length_m_per_km2_non_negative
+
+      - name: last_load_ts
+        description: "Latest load timestamp among contributing road segments."
+        tests: [not_null]
