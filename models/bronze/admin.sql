@@ -1,1 +1,0 @@
-select * from GEO_PROJECT.BRONZE.ADMIN

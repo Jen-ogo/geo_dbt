@@ -17,7 +17,6 @@ typed as (
     nullif(osm_id,'')::string as osm_id,
     osm_way_id::string as osm_way_id,
     nullif(name,'')::string as name,
-
     case
       when amenity is not null then 'amenity'
       when shop is not null then 'shop'
@@ -29,14 +28,12 @@ typed as (
       when landuse is not null then 'landuse'
       else null
     end::string as poi_class,
-
     coalesce(amenity, shop, tourism, office, leisure, sport, building, landuse)::string as poi_type,
 
     {{ wkt_to_geog('geom_wkt') }} as geog,
     region::string as region_code,
     source_file::string as source_file,
     load_ts::timestamp_ntz as load_ts,
-
     tags as tags,
     other_tags::string as other_tags_raw
   from src
