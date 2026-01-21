@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: audit_feat_h3_buildings_r10_samples
+    description: >
+      Audit for feat_h3_buildings_R10: rowcount + up to 10 sample rows with WKT polygon/point.
+
+    columns:
+      - name: model_name
+        tests: [not_null]
+      - name: row_count
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "row_count > 0"
+              config:
+                name: audit_feat_h3_buildings_r10__rowcount_gt_0
+
+      - name: cell_wkt_4326
+        tests:
+          - wkt_not_empty:
+              config:
+                name: audit_feat_h3_buildings_r10__cell_wkt_not_empty
+          - wkt_prefix_any:
+              prefixes: ["POLYGON(", "MULTIPOLYGON("]
+              config:
+                name: audit_feat_h3_buildings_r10__cell_wkt_prefix_any
+
+      - name: cell_center_wkt_4326
+        tests:
+          - wkt_not_empty:
+              config:
+                name: audit_feat_h3_buildings_r10__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              prefixes: ["POINT("]
+              config:
+                name: audit_feat_h3_buildings_r10__cell_center_wkt_prefix_any

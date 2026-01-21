@@ -2,15 +2,47 @@ version: 2
 
 models:
   - name: audit_geo_samples
+    description: >
+      Audit helper for GOLD buildings feature: row count + sample WKT geometries
+      (cell polygon + cell center point) for quick sanity checks.
+
     columns:
       - name: model_name
-        tests: [not_null, unique]
+        description: "Audited model name."
+        tests:
+          - not_null
+          - unique
+
       - name: row_count
+        description: "Row count in the audited model."
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              expression: "row_count > 0"
+              arguments:
+                expression: "row_count > 0"
+              config:
+                name: audit_geo_samples__rowcount_gt_0
+
       - name: wkt_polygon_sample
-        tests: [not_null]
+        description: "Sample cell polygon WKT (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: audit_geo_samples__wkt_polygon_not_empty
+          - wkt_prefix_any:
+              prefixes: ["POLYGON(", "MULTIPOLYGON("]
+              config:
+                name: audit_geo_samples__wkt_polygon_prefix_any
+
       - name: wkt_point_sample
-        tests: [not_null]
+        description: "Sample cell center point WKT (debug)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: audit_geo_samples__wkt_point_not_empty
+          - wkt_prefix_any:
+              prefixes: ["POINT("]
+              config:
+                name: audit_geo_samples__wkt_point_prefix_any
