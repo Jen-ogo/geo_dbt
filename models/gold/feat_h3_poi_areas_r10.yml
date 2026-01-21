@@ -1,0 +1,146 @@
+version: 2
+
+models:
+  - name: feat_h3_poi_areas_r10
+    description: >
+      H3 R10 POI polygon feature mart (areas).
+      Aggregates SILVER.POI_AREAS into the H3 resolution 10 grid using centroid-to-cell mapping
+      and joins to SILVER.DIM_H3_R10_CELLS for canonical cell geometry.
+
+      Purpose:
+      - ML-ready / analytics features capturing density and composition of polygon-based POIs.
+      - Counts/densities are stable with centroid mapping; area-based metrics are intentionally excluded
+        because large polygons (especially landuse=industrial/commercial) would inflate a single cell.
+
+      Grain: (region_code, h3_r10) — exactly one row per H3 cell per region_code.
+
+    tests:
+      - rowcount_gt_0:
+          name: feat_h3_poi_areas_r10__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10]
+          config:
+            name: feat_h3_poi_areas_r10__uk_region_h3
+
+    columns:
+      - name: region_code
+        description: "Region/country code (e.g., poland, germany)."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 cell index at resolution 10."
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_poi_areas_r10__h3_r10_is_hex
+
+      - name: cell_area_m2
+        description: "Area of the H3 cell polygon (m²)."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary as WKT POLYGON (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: feat_h3_poi_areas_r10__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POLYGON(", "MULTIPOLYGON("]
+              config:
+                name: feat_h3_poi_areas_r10__cell_wkt_prefix_polygon
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center point as WKT POINT (debug/inspection)."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config:
+                name: feat_h3_poi_areas_r10__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POINT("]
+              config:
+                name: feat_h3_poi_areas_r10__cell_center_wkt_prefix_point
+
+      - name: poi_areas_cnt
+        description: "Total number of POI polygons whose centroid falls into the cell."
+        tests:
+          - not_null
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__poi_areas_cnt_non_negative
+
+      - name: amenity_areas_cnt
+        description: "Count of amenity POI polygons in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__amenity_areas_cnt_non_negative
+
+      - name: shop_areas_cnt
+        description: "Count of shop POI polygons in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__shop_areas_cnt_non_negative
+
+      - name: tourism_areas_cnt
+        description: "Count of tourism POI polygons in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__tourism_areas_cnt_non_negative
+
+      - name: office_areas_cnt
+        description: "Count of office POI polygons in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__office_areas_cnt_non_negative
+
+      - name: leisure_areas_cnt
+        description: "Count of leisure POI polygons in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__leisure_areas_cnt_non_negative
+
+      - name: sport_areas_cnt
+        description: "Count of sport POI polygons in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__sport_areas_cnt_non_negative
+
+      - name: building_areas_cnt
+        description: "Count of building-class polygons in the cell."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__building_areas_cnt_non_negative
+
+      - name: landuse_areas_cnt
+        description: "Count of landuse polygons in the cell (often large industrial/commercial areas)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__landuse_areas_cnt_non_negative
+
+      - name: poi_areas_per_km2
+        description: "POI polygon density per km² (poi_areas_cnt normalized by cell area)."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_poi_areas_r10__poi_areas_per_km2_non_negative
+
+      - name: last_load_ts
+        description: "Latest load timestamp among contributing POI polygons."
+        tests: [not_null]
