@@ -1,0 +1,180 @@
+version: 2
+
+models:
+  - name: feat_h3_transit_points_r10
+    description: >
+      GOLD.FEAT_H3_TRANSIT_POINTS_R10 — transit points features on the H3 resolution 10 grid.
+
+      Source
+      - SILVER.TRANSIT_POINTS: canonical public transport / related points (GEOGRAPHY point + tags-derived class/type)
+      - SILVER.DIM_H3_R10_CELLS: canonical H3 cell geometry (boundary/center WKT + area)
+
+      Method
+      - Assign each transit point to an H3 r10 cell via `H3_POINT_TO_CELL_STRING(geog, 10)` (point-to-cell).
+      - Aggregate counts per cell and compute simple shares + per-km² densities.
+      - Join to DIM to expose canonical geometry debug columns and ensure consistent cell metadata.
+
+      Grain
+      - (region_code, h3_r10) — exactly 1 row per H3 cell per region_code (via DIM join).
+
+      Notes
+      - This mart is intended for ML features and analytics rollups over a stable H3 grid.
+      - Shares are monitored as WARN (0..1), because edge cases may exist in upstream tagging.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_transit_points_r10__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10]
+          config:
+            name: feat_h3_transit_points_r10__uk_region_h3
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "transport_points_share is null or (transport_points_share >= 0 and transport_points_share <= 1)"
+          config:
+            name: feat_h3_transit_points_r10__transport_share_0_1_warn
+            severity: warn
+            warn_if: "> 0"
+            
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(has_transit_points = false and last_load_ts is null) or (has_transit_points = true and last_load_ts is not null)"
+          config:
+            name: feat_h3_transit_points_r10__coverage_last_load_ts_consistency
+            severity: error
+            warn_if: "> 0"
+
+    columns:
+      - name: region_code
+        description: "Region/country code used across the project (e.g., poland, germany)."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_transit_points_r10__region_code_not_null
+
+      - name: h3_r10
+        description: "H3 cell index at resolution 10 (lowercase hex string)."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_transit_points_r10__h3_r10_not_null
+          - is_h3_hex:
+              column_name: h3_r10
+              config:
+                name: feat_h3_transit_points_r10__h3_r10_is_hex
+
+      - name: cell_area_m2
+        description: "Area of the H3 cell boundary in square meters (m²)."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_transit_points_r10__cell_area_m2_not_null
+          - non_negative:
+              column_name: cell_area_m2
+              config:
+                name: feat_h3_transit_points_r10__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary as WKT (EPSG:4326) for debug/inspection. Expected polygonal."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_transit_points_r10__cell_wkt_not_null
+          - wkt_not_empty:
+              column_name: cell_wkt_4326
+              config:
+                name: feat_h3_transit_points_r10__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_transit_points_r10__cell_wkt_prefix_polygonal
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center point as WKT (EPSG:4326) for debug/inspection. Expected POINT."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_transit_points_r10__cell_center_wkt_not_null
+          - wkt_not_empty:
+              column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_transit_points_r10__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_transit_points_r10__cell_center_wkt_prefix_point
+
+      - name: transit_points_cnt
+        description: "Total count of transit points in the H3 cell."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_transit_points_r10__transit_points_cnt_not_null
+          - non_negative:
+              column_name: transit_points_cnt
+              config:
+                name: feat_h3_transit_points_r10__transit_points_cnt_non_negative
+
+      - name: transport_points_cnt
+        description: >
+          Count of transit points classified as `poi_class = 'transport'` within the H3 cell
+          (stops/platforms/rail/public_transport-related tags).
+        tests:
+          - non_negative:
+              column_name: transport_points_cnt
+              config:
+                name: feat_h3_transit_points_r10__transport_points_cnt_non_negative
+
+      - name: amenity_points_cnt
+        description: "Count of transit points classified as `poi_class = 'amenity'` within the H3 cell."
+        tests:
+          - non_negative:
+              column_name: amenity_points_cnt
+              config:
+                name: feat_h3_transit_points_r10__amenity_points_cnt_non_negative
+
+      - name: emergency_points_cnt
+        description: "Count of transit points classified as `poi_class = 'emergency'` within the H3 cell."
+        tests:
+          - non_negative:
+              column_name: emergency_points_cnt
+              config:
+                name: feat_h3_transit_points_r10__emergency_points_cnt_non_negative
+
+      - name: transport_points_share
+        description: >
+          Share of transport-class points among all transit points in the cell:
+          `transport_points_cnt / transit_points_cnt`. Expected range: 0..1 (WARN if outside).
+      - name: transit_points_per_km2
+        description: "Transit points density per km² of H3 cell area: `transit_points_cnt / (cell_area_m2 / 1e6)`."
+        tests:
+          - non_negative:
+              column_name: transit_points_per_km2
+              config:
+                name: feat_h3_transit_points_r10__transit_points_per_km2_non_negative
+
+      - name: transport_points_per_km2
+        description: "Transport-class points density per km² of H3 cell area."
+        tests:
+          - non_negative:
+              column_name: transport_points_per_km2
+              config:
+                name: feat_h3_transit_points_r10__transport_points_per_km2_non_negative
+
+      - name: last_load_ts
+        description: >
+          Latest load timestamp among contributing transit points in the cell.
+          NULL for cells with zero transit points (DIM-driven full grid output).
+
+      - name: has_transit_points
+        description: "TRUE if the cell contains at least 1 transit point, else FALSE."
+        tests:
+          - not_null:
+              config: {name: feat_h3_transit_points_r10__has_transit_points_not_null}
