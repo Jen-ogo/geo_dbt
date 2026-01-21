@@ -1,0 +1,215 @@
+version: 2
+
+models:
+  - name: feat_h3_pop_r10_final
+    description: >
+      **GOLD.FEAT_H3_POP_R10** — population & employment features on the H3 resolution 10 grid,
+      intended for scoring / ML feature sets and higher-level aggregations.
+
+      **Source & method**
+      - Built from **SILVER.FEAT_H3_POP_R10**, which aggregates the Eurostat Census Grid 2021 (1km x 1km)
+        into H3 r10 cells and splits metrics by the ADMIN4 polygon slice (admin4_osm_id/admin4_name).
+      - Each output row represents the grain:
+        **(region_code, h3_r10, admin4_osm_id)**.
+        This allows later rollups to admin4 / region / buffers along roads, etc., without losing the
+        administrative attribution that comes from the original census grid join.
+
+      **What is inside**
+      - Core counts: pop_total / pop_male / pop_female / pop_age_* / emp_total
+      - Shares: share_age_ge65 / share_age_lt15 / share_emp (derived from the sums)
+      - Coverage/support: grid_cells_cnt = number of contributing 1km census cells (≈ support area in km²)
+      - Geometry/debug columns for H3 cell: cell_wkt_4326, cell_center_wkt_4326, cell_area_m2
+
+      **Densities (two interpretations; keep both)**
+      - *_per_km2_support:
+        densities computed per km² of contributing census support
+        (grid_cells_cnt km²). Useful when you want “density over observed/support area”.
+      - *_per_km2_hex:
+        densities computed per km² of the H3 cell area (cell_area_m2). Useful when you want
+        comparable values across different shapes/coverage within the same H3 resolution.
+
+      **Data-quality philosophy (GOLD)**
+      - Strict on structural constraints (keys, geometry WKT shape, H3 format, >0 areas/support).
+      - “Business” anomalies (e.g., share slightly outside [0,1]) are **WARN**, not ERROR, to avoid noise
+        and blocking the pipeline; investigate via the failing rows when needed.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_pop_r10__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10, admin4_osm_id]
+          config:
+            name: feat_h3_pop_r10__uk_region_h3_admin4
+
+      - num_between_or_null:
+          column_name: share_age_ge65
+          min_value: 0
+          max_value: 1
+          config:
+            name: feat_h3_pop_r10__share_age_ge65_0_1
+            severity: warn
+
+      - num_between_or_null:
+          column_name: share_age_lt15
+          min_value: 0
+          max_value: 1
+          config:
+            name: feat_h3_pop_r10__share_age_lt15_0_1
+            severity: warn
+
+      - num_between_or_null:
+          column_name: share_emp
+          min_value: 0
+          max_value: 1
+          config:
+            name: feat_h3_pop_r10__share_emp_0_1
+            severity: warn
+
+    columns:
+      - name: region_code
+        description: "Region/country code used across the project (e.g. poland, germany)."
+        tests: [not_null]
+
+      - name: h3_r10
+        description: "H3 index (resolution 10) identifying the hex cell."
+        tests:
+          - not_null
+          - is_h3_hex:
+              config:
+                name: feat_h3_pop_r10__h3_r10_is_hex
+
+      - name: admin4_osm_id
+        description: >
+          OSM identifier of the ADMIN4 polygon slice used for attribution of census grid cells.
+          This is part of the model grain: (region_code, h3_r10, admin4_osm_id).
+        tests: [not_null]
+
+      - name: admin4_name
+        description: "Human-readable ADMIN4 name for interpretability and QA."
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT (EPSG:4326) for debug/inspection."
+        tests:
+          - not_null
+          - wkt_prefix_in:
+              prefixes: ['POLYGON(', 'MULTIPOLYGON(']
+              config:
+                name: feat_h3_pop_r10__cell_wkt_polygon
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center point WKT (EPSG:4326) for debug/inspection."
+        tests:
+          - not_null
+          - wkt_prefix_in:
+              prefixes: ['POINT(']
+              config:
+                name: feat_h3_pop_r10__cell_center_wkt_point
+
+      - name: cell_area_m2
+        description: "Area of the H3 cell boundary in square meters."
+        tests:
+          - num_gtoe_0:
+              config:
+                name: feat_h3_pop_r10_final__cell_area_m2_gt_0
+
+      - name: grid_cells_cnt
+        description: >
+          Count of contributing 1km census grid cells for this (region_code, h3_r10, admin4_osm_id) slice.
+          Interpretable as **support_area_km2 ≈ grid_cells_cnt**, because each grid cell is 1 km².
+        tests:
+          - num_gtoe_0:
+              config:
+                name: feat_h3_pop_r10_final__grid_cells_cnt_gt_0
+
+      - name: pop_total
+        description: "Total population summed from contributing census grid cells."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_pop_r10__pop_total_non_negative
+
+      - name: pop_male
+        description: "Male population summed from contributing census grid cells."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_pop_r10__pop_male_non_negative
+
+      - name: pop_female
+        description: "Female population summed from contributing census grid cells."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_pop_r10__pop_female_non_negative
+
+      - name: pop_age_lt15
+        description: "Population aged <15 summed from contributing census grid cells."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_pop_r10__pop_age_lt15_non_negative
+
+      - name: pop_age_1564
+        description: "Population aged 15–64 summed from contributing census grid cells."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_pop_r10__pop_age_1564_non_negative
+
+      - name: pop_age_ge65
+        description: "Population aged 65+ summed from contributing census grid cells."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_pop_r10__pop_age_ge65_non_negative
+
+      - name: emp_total
+        description: "Employed population summed from contributing census grid cells."
+        tests:
+          - non_negative:
+              config:
+                name: feat_h3_pop_r10__emp_total_non_negative
+
+      - name: share_age_ge65
+        description: "Share of population aged 65+ (pop_age_ge65 / pop_total) for this slice."
+
+      - name: share_age_lt15
+        description: "Share of population aged <15 (pop_age_lt15 / pop_total) for this slice."
+
+      - name: share_emp
+        description: "Employment share (emp_total / pop_total) for this slice."
+
+      - name: support_area_m2
+        description: >
+          Support area used to interpret census coverage. For 1km census grid this equals 1,000,000 m².
+          (Used for documentation/lineage; densities rely on grid_cells_cnt and/or cell_area_m2.)
+
+      - name: pop_method
+        description: >
+          Method label describing how population was aggregated into H3.
+          This model expects a single allowed method for consistent interpretation.
+        tests:
+          - values_in_or_null:
+              values: ['census_grid_1km_to_h3_admin4']
+              config:
+                name: feat_h3_pop_r10__pop_method_allowed
+
+      - name: pop_per_km2_support
+        description: >
+          Population density per km² of contributing census support area:
+          pop_total / grid_cells_cnt.
+          Prefer this when comparing density only across “observed” area coverage.
+
+      - name: pop_per_km2_hex
+        description: >
+          Population density per km² of full H3 cell area:
+          pop_total / (cell_area_m2 / 1e6).
+          Prefer this when you need comparable “per hex area” densities.
+
+      - name: emp_per_km2_support
+        description: "Employment density per km² of contributing census support area."
+
+      - name: emp_per_km2_hex
+        description: "Employment density per km² of full H3 cell area."
