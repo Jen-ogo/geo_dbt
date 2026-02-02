@@ -1,0 +1,124 @@
+version: 2
+
+models:
+  - name: feat_h3_pop_r10
+    description: >
+      Population & employment features on H3 R10 built directly in GOLD from SILVER.census_grid_2021_admin4.
+      Method: polyfill 1km census polygon into H3 R10 + area-weighted allocation by intersection share.
+      Grain: (region_code, h3_r10, admin4_osm_id).
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_pop_r10__rowcount_gt_0}
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10, admin4_osm_id]
+          config: {name: feat_h3_pop_r10__uk_region_h3_admin4}
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "cell_area_m2 is null or cell_area_m2 > 0"
+          config:
+            name: feat_h3_pop_r10__cell_area_m2_gt_0_warn
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "share_emp is null or (share_emp >= 0 and share_emp <= 1)"
+          config:
+            name: feat_h3_pop_r10__share_emp_0_1_warn
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "share_age_lt15 is null or (share_age_lt15 >= 0 and share_age_lt15 <= 1)"
+          config:
+            name: feat_h3_pop_r10__share_age_lt15_0_1_warn
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "share_age_ge65 is null or (share_age_ge65 >= 0 and share_age_ge65 <= 1)"
+          config:
+            name: feat_h3_pop_r10__share_age_ge65_0_1_warn
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              column_name: h3_r10
+              config: {name: feat_h3_pop_r10__h3_r10_is_hex}
+
+      - name: admin4_osm_id
+        tests: [not_null]
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              column_name: cell_area_m2
+              config: {name: feat_h3_pop_r10__cell_area_m2_non_negative}
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_wkt_4326
+              config: {name: feat_h3_pop_r10__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              column_name: cell_wkt_4326
+              prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config: {name: feat_h3_pop_r10__cell_wkt_prefix_polygonal}
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_center_wkt_4326
+              config: {name: feat_h3_pop_r10__cell_center_wkt_not_empty}
+          - wkt_prefix_any:
+              column_name: cell_center_wkt_4326
+              prefixes: ["POINT"]
+              config: {name: feat_h3_pop_r10__cell_center_wkt_prefix_point}
+
+      - name: grid_cells_cnt
+        tests:
+          - not_null
+          - non_negative:
+              column_name: grid_cells_cnt
+              config: {name: feat_h3_pop_r10__grid_cells_cnt_non_negative}
+
+      - name: pop_total
+        tests:
+          - non_negative:
+              column_name: pop_total
+              config: {name: feat_h3_pop_r10__pop_total_non_negative}
+
+      - name: emp_total
+        tests:
+          - non_negative:
+              column_name: emp_total
+              config: {name: feat_h3_pop_r10__emp_total_non_negative}
+
+      - name: pop_method
+        tests:
+          - values_in_or_null:
+              column_name: pop_method
+              values: ["census_grid_1km_polyfill_xarea_admin4"]
+              config: {name: feat_h3_pop_r10__pop_method_allowed}
+
+      - name: last_load_ts
+        tests: [not_null]

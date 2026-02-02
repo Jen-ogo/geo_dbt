@@ -1,0 +1,63 @@
+version: 2
+
+models:
+  - name: feat_h3_degurba_r7
+    description: >
+      DEGURBA attribution on dense H3 R7 grid (DIM-driven).
+      Same logic as R10, using DIM_H3_R7_CELLS.
+
+      Grain: (region_code, h3_r7).
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_degurba_r7__rowcount_gt_0}
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r7]
+          config: {name: feat_h3_degurba_r7__uk_region_h3}
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              config: {name: feat_h3_degurba_r7__h3_is_hex}
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              config: {name: feat_h3_degurba_r7__cell_area_non_negative}
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config: {name: feat_h3_degurba_r7__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POLYGON","MULTIPOLYGON"]
+              config: {name: feat_h3_degurba_r7__cell_wkt_prefix_polygonal}
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config: {name: feat_h3_degurba_r7__center_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POINT"]
+              config: {name: feat_h3_degurba_r7__center_wkt_prefix_point}
+
+      - name: degurba
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: [1, 2, 3]
+              config: {name: feat_h3_degurba_r7__degurba_allowed_1_2_3_or_null}
+
+      - name: last_load_ts
+        description: "Nullable if no LAU match."

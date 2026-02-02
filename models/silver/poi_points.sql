@@ -18,12 +18,16 @@ typed as (
     osm_id::string as osm_id,
     nullif(name,'')::string as name,
 
+    -- IMPORTANT: keep region from BRONZE (fixes downstream compilation expecting `region`)
+    region::string as region,
+    lower(region::string) as region_code,
+
     tags:"addr:housenumber"::string as addr_housenumber,
     tags:"addr:street"::string      as addr_street,
     tags:"addr:postcode"::string    as addr_postcode,
     coalesce(tags:"addr:city"::string, tags:"addr:place"::string) as addr_city_or_place,
 
-    coalesce(
+    lower(coalesce(
       tags:"amenity"::string,
       tags:"shop"::string,
       tags:"tourism"::string,
@@ -36,9 +40,9 @@ typed as (
       tags:"railway"::string,
       tags:"highway"::string,
       tags:"place"::string
-    ) as poi_type,
+    )) as poi_type,
 
-    case
+    lower(case
       when tags:"amenity" is not null then 'amenity'
       when tags:"shop" is not null then 'shop'
       when tags:"tourism" is not null then 'tourism'
@@ -52,13 +56,13 @@ typed as (
       when tags:"highway" is not null then 'highway'
       when tags:"place" is not null then 'place'
       else null
-    end as poi_class,
+    end) as poi_class,
 
     tags as tags,
     other_tags::string as other_tags_raw,
 
     {{ wkt_to_geog('geom_wkt') }} as geog,
-    region::string as region_code,
+
     source_file::string as source_file,
     load_ts::timestamp_ntz as load_ts
   from src
@@ -70,14 +74,16 @@ geo as (
     {{ geog_to_wkt('geog') }} as geom_wkt_4326
   from typed
   where geog is not null
-    and poi_type is not null
+    and poi_class is not null
+    and poi_type  is not null
+    and region is not null
 ),
 
 final as (
   select *
   from geo
   {{ dedup_qualify(
-      partition_by=['osm_id'],
+      partition_by=['region_code','region','osm_id'],
       order_by=['load_ts desc','source_file desc']
   ) }}
 )

@@ -2,13 +2,13 @@
     materialized='dynamic_table',
     target_lag='48 hours',
     snowflake_warehouse='COMPUTE_WH',
-    cluster_by=['region_code','h3_r10']
+    cluster_by=['region_code','h3_r7']
 ) }}
 
 with pts as (
   select
     region_code::string as region_code,
-    h3_point_to_cell_string(geog, 10)::string as h3_r10,
+    h3_point_to_cell_string(geog, 7)::string as h3_r7,
     lower(poi_class::string) as poi_class,
     lower(poi_type::string)  as poi_type,
     load_ts::timestamp_ntz   as load_ts
@@ -20,7 +20,7 @@ with pts as (
 agg as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
 
     count(*)::number(18,0) as transit_points_cnt,
     sum(iff(poi_class='transport', 1, 0))::number(18,0) as transport_points_cnt,
@@ -32,25 +32,25 @@ agg as (
 
     max(load_ts) as last_load_ts
   from pts
-  where h3_r10 is not null
+  where h3_r7 is not null
   group by 1,2
 ),
 
 cells as (
   select
     region_code::string as region_code,
-    h3_r10::string      as h3_r10,
+    h3_r7::string       as h3_r7,
     cell_area_m2,
     cell_wkt_4326,
     cell_center_wkt_4326
-  from {{ ref('dim_h3_r10_cells') }}
+  from {{ ref('dim_h3_r7_cells') }}
   where region_code is not null
-    and h3_r10 is not null
+    and h3_r7 is not null
 )
 
 select
   c.region_code,
-  c.h3_r10,
+  c.h3_r7,
   c.cell_area_m2,
   c.cell_wkt_4326,
   c.cell_center_wkt_4326,
@@ -76,4 +76,4 @@ select
 from cells c
 left join agg a
   on a.region_code = c.region_code
- and a.h3_r10      = c.h3_r10
+ and a.h3_r7      = c.h3_r7

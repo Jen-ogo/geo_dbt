@@ -3,31 +3,46 @@ version: 2
 models:
   - name: poi_points
     description: >
-      Canonical POI points (nodes) built from OSM-derived source POI_POINTS.
-      Each record is typed into poi_class / poi_type based on tags JSON, enriched with
-      address attributes, parsed into GEOGRAPHY (WGS84) and exported to WKT for debug.
-      Deduplicated by osm_id (latest load_ts/source_file wins).
+      Canonical POI points (OSM nodes) built from BRONZE.POI_POINTS.
+      Region attribution is taken directly from the BRONZE `region` column to keep
+      compatibility with GOLD micro marts expecting (region_code, region, h3_*).
+      Deduplicated by (region_code, region, osm_id) with latest load_ts/source_file wins.
 
     tests:
       - rowcount_gt_0:
-          config:
-            name: poi_points__rowcount_gt_0
+          config: {name: poi_points__rowcount_gt_0}
+      - not_empty:
+          config: {name: poi_points__not_empty}
 
     columns:
       - name: feature_id
         description: "Stable POI feature key for nodes: 'N<osm_id>'."
         tests:
-          - not_null
-          - unique
+          - not_null:
+              config: {name: poi_points__feature_id_not_null}
+          - unique:
+              config: {name: poi_points__feature_id_unique}
 
       - name: osm_id
         description: "OSM node id."
         tests:
-          - not_null
-          - unique
+          - not_null:
+              config: {name: poi_points__osm_id_not_null}
 
       - name: name
         description: "OSM name tag (if present). Nullable."
+
+      - name: region_code
+        description: "Canonical region_code (country code) used across the project (e.g. poland, germany)."
+        tests:
+          - not_null:
+              config: {name: poi_points__region_code_not_null}
+
+      - name: region
+        description: "Region label from BRONZE.POI_POINTS (required for GOLD joins)."
+        tests:
+          - not_null:
+              config: {name: poi_points__region_not_null}
 
       - name: addr_housenumber
         description: "Address house number from tags (addr:housenumber). Nullable."
@@ -43,44 +58,22 @@ models:
           High-level POI category inferred from which tag family is present
           (amenity/shop/tourism/leisure/office/craft/man_made/emergency/public_transport/railway/highway/place).
         tests:
-          - not_null
+          - not_null:
+              config: {name: poi_points__poi_class_not_null}
           - values_in_or_null:
               values:
                 ["amenity","shop","tourism","leisure","office","craft","man_made","emergency","public_transport","railway","highway","place"]
-              config:
-                name: poi_points__poi_class_in_allowlist_or_null
+              config: {name: poi_points__poi_class_allowlist}
 
       - name: poi_type
         description: "Specific POI type value taken from tags (e.g., amenity=restaurant, shop=supermarket)."
         tests:
-          - not_null
-          - wkt_not_empty:
-              column_name: poi_type
-              config:
-                name: poi_points__poi_type_not_empty
-
-      - name: geog
-        description: "POI point geometry as Snowflake GEOGRAPHY (WGS84)."
-        tests:
-          - not_null
-          - geog_is_point:
-              column_name: geog
-              config:
-                name: poi_points__geog_is_point
-
-      - name: geom_wkt_4326
-        description: "WKT representation of geog (debug/inspection)."
-        tests:
-          - not_null
-          - wkt_not_empty:
-              column_name: geom_wkt_4326
-              config:
-                name: poi_points__geom_wkt_4326_not_empty
-          - wkt_prefix_any:
-              column_name: geom_wkt_4326
-              prefixes: ["POINT"]
-              config:
-                name: poi_points__geom_wkt_4326_prefix_point
+          - not_null:
+              config: {name: poi_points__poi_type_not_null}
+          # IMPORTANT: dbt_utils.expression_is_true expects `expression:` at top-level (no `arguments:`)
+          - dbt_utils.expression_is_true:
+              expression: "trim(poi_type) <> ''"
+              config: {name: poi_points__poi_type_not_blank}
 
       - name: tags
         description: "Parsed JSON from other_tags. Nullable."
@@ -88,17 +81,36 @@ models:
       - name: other_tags_raw
         description: "Raw OSM other_tags string. Nullable."
 
-      - name: region_code
-        description: "Region/country code from ingestion (e.g., poland, germany)."
+      - name: geog
+        description: "POI point geometry as Snowflake GEOGRAPHY (WGS84)."
         tests:
-          - not_null
+          - not_null:
+              config: {name: poi_points__geog_not_null}
+          - geog_is_point:
+              column_name: geog
+              config: {name: poi_points__geog_is_point}
+
+      - name: geom_wkt_4326
+        description: "WKT representation of geog (debug/inspection)."
+        tests:
+          - not_null:
+              config: {name: poi_points__geom_wkt_4326_not_null}
+          - wkt_not_empty:
+              column_name: geom_wkt_4326
+              config: {name: poi_points__geom_wkt_4326_not_empty}
+          - wkt_prefix_any:
+              column_name: geom_wkt_4326
+              prefixes: ["POINT"]
+              config: {name: poi_points__geom_wkt_4326_prefix_point}
 
       - name: source_file
         description: "Source file path for lineage/debug."
         tests:
-          - not_null
+          - not_null:
+              config: {name: poi_points__source_file_not_null}
 
       - name: load_ts
         description: "Ingestion/load timestamp used for deduplication."
         tests:
-          - not_null
+          - not_null:
+              config: {name: poi_points__load_ts_not_null}

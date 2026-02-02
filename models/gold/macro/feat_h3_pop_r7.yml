@@ -1,0 +1,307 @@
+version: 2
+
+models:
+  - name: feat_h3_pop_r7
+    description: >
+      **GOLD.FEAT_H3_POP_R7** — population & employment features on the H3 resolution 7 grid,
+      derived from Eurostat Census Grid 2021 (1km).
+
+      **Method**
+      - Input: **census_grid_2021_admin4** (already attributed to ADMIN4 and scoped by current admin boundaries).
+      - Each 1km grid cell polygon is covered into H3 r7 cells using **H3_COVERAGE_STRINGS**.
+      - Metrics are allocated to each H3 cell proportionally to the intersection area share
+        (area-weighted allocation): w = inter_area_m2 / grid_area_m2.
+      - H3 cell geometry/debug columns are taken from **dim_h3_r7_cells** (canonical dims).
+
+      **Grain**
+      - (region_code, h3_r7, admin4_osm_id) — keeps ADMIN4 slice attribution for downstream rollups.
+
+      **Densities**
+      - *_per_km2_support: per km² of contributing census support (grid_cells_cnt km²).
+      - *_per_km2_hex: per km² of full H3 cell area.
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: feat_h3_pop_r7__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r7, admin4_osm_id]
+          config:
+            name: feat_h3_pop_r7__uk_region_h3_admin4
+
+      # shares sanity (WARN on any, ERROR only if it explodes)
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "share_emp is null or (share_emp >= 0 and share_emp <= 1)"
+          config:
+            name: feat_h3_pop_r7__share_emp_0_1
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "share_age_lt15 is null or (share_age_lt15 >= 0 and share_age_lt15 <= 1)"
+          config:
+            name: feat_h3_pop_r7__share_age_lt15_0_1
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "share_age_ge65 is null or (share_age_ge65 >= 0 and share_age_ge65 <= 1)"
+          config:
+            name: feat_h3_pop_r7__share_age_ge65_0_1
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+    columns:
+      - name: region_code
+        description: "Region/country code used across the project (e.g. poland, germany)."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_pop_r7__region_code_not_null
+
+      - name: h3_r7
+        description: "H3 index (resolution 7) identifying the hex cell."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_pop_r7__h3_r7_not_null
+          - is_h3_hex:
+              arguments:
+                column_name: h3_r7
+              config:
+                name: feat_h3_pop_r7__h3_r7_is_hex
+
+      - name: cell_area_m2
+        description: "Area of the H3 cell boundary in square meters."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_pop_r7__cell_area_m2_not_null
+          - non_negative:
+              arguments:
+                column_name: cell_area_m2
+              config:
+                name: feat_h3_pop_r7__cell_area_m2_non_negative
+
+      - name: cell_wkt_4326
+        description: "H3 cell boundary WKT (EPSG:4326) for debug/inspection."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_pop_r7__cell_wkt_4326_not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_wkt_4326
+              config:
+                name: feat_h3_pop_r7__cell_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: feat_h3_pop_r7__cell_wkt_polygonal
+
+      - name: cell_center_wkt_4326
+        description: "H3 cell center point WKT (EPSG:4326) for debug/inspection."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_pop_r7__cell_center_wkt_4326_not_null
+          - wkt_not_empty:
+              arguments:
+                column_name: cell_center_wkt_4326
+              config:
+                name: feat_h3_pop_r7__cell_center_wkt_not_empty
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config:
+                name: feat_h3_pop_r7__cell_center_wkt_point
+
+      - name: admin4_osm_id
+        description: "OSM identifier of the ADMIN4 polygon slice used for census attribution."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_pop_r7__admin4_osm_id_not_null
+
+      - name: admin4_name
+        description: "Human-readable ADMIN4 name for interpretability and QA."
+
+      - name: pop_total
+        description: "Area-weighted total population allocated to the H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_total
+              config:
+                name: feat_h3_pop_r7__pop_total_non_negative
+
+      - name: pop_male
+        description: "Area-weighted male population allocated to the H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_male
+              config:
+                name: feat_h3_pop_r7__pop_male_non_negative
+
+      - name: pop_female
+        description: "Area-weighted female population allocated to the H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_female
+              config:
+                name: feat_h3_pop_r7__pop_female_non_negative
+
+      - name: pop_age_lt15
+        description: "Area-weighted population age <15 allocated to the H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_age_lt15
+              config:
+                name: feat_h3_pop_r7__pop_age_lt15_non_negative
+
+      - name: pop_age_1564
+        description: "Area-weighted population age 15–64 allocated to the H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_age_1564
+              config:
+                name: feat_h3_pop_r7__pop_age_1564_non_negative
+
+      - name: pop_age_ge65
+        description: "Area-weighted population age 65+ allocated to the H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_age_ge65
+              config:
+                name: feat_h3_pop_r7__pop_age_ge65_non_negative
+
+      - name: emp_total
+        description: "Area-weighted employed population allocated to the H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: emp_total
+              config:
+                name: feat_h3_pop_r7__emp_total_non_negative
+
+      - name: share_age_ge65
+        description: "Share of population aged 65+ (pop_age_ge65 / pop_total) for this slice."
+        tests:
+          - num_between_or_null:
+              arguments:
+                column_name: share_age_ge65
+                min_value: 0
+                max_value: 1
+              config:
+                name: feat_h3_pop_r7__share_age_ge65_0_1_warn
+                severity: warn
+
+      - name: share_age_lt15
+        description: "Share of population aged <15 (pop_age_lt15 / pop_total) for this slice."
+        tests:
+          - num_between_or_null:
+              arguments:
+                column_name: share_age_lt15
+                min_value: 0
+                max_value: 1
+              config:
+                name: feat_h3_pop_r7__share_age_lt15_0_1_warn
+                severity: warn
+
+      - name: share_emp
+        description: "Employment share (emp_total / pop_total) for this slice."
+        tests:
+          - num_between_or_null:
+              arguments:
+                column_name: share_emp
+                min_value: 0
+                max_value: 1
+              config:
+                name: feat_h3_pop_r7__share_emp_0_1_warn
+                severity: warn
+
+      - name: grid_cells_cnt
+        description: "Number of 1km grid cells contributing (distinct grid_id) to this H3 cell."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: grid_cells_cnt
+              config:
+                name: feat_h3_pop_r7__grid_cells_cnt_non_negative
+
+      - name: support_area_m2
+        description: "Support area from census grid coverage: grid_cells_cnt * 1,000,000 m²."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: support_area_m2
+              config:
+                name: feat_h3_pop_r7__support_area_m2_non_negative
+
+      - name: pop_method
+        description: "Method label describing how population was aggregated into H3."
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: pop_method
+                values: ["census_grid_1km_coverage_xarea_admin4_r7"]
+              config:
+                name: feat_h3_pop_r7__pop_method_allowed
+
+      - name: pop_per_km2_support
+        description: "Population density per km² of contributing census support area."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_per_km2_support
+              config:
+                name: feat_h3_pop_r7__pop_per_km2_support_non_negative
+
+      - name: emp_per_km2_support
+        description: "Employment density per km² of contributing census support area."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: emp_per_km2_support
+              config:
+                name: feat_h3_pop_r7__emp_per_km2_support_non_negative
+
+      - name: pop_per_km2_hex
+        description: "Population density per km² of full H3 cell area."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: pop_per_km2_hex
+              config:
+                name: feat_h3_pop_r7__pop_per_km2_hex_non_negative
+
+      - name: emp_per_km2_hex
+        description: "Employment density per km² of full H3 cell area."
+        tests:
+          - non_negative:
+              arguments:
+                column_name: emp_per_km2_hex
+              config:
+                name: feat_h3_pop_r7__emp_per_km2_hex_non_negative
+
+      - name: last_load_ts
+        description: "Latest load timestamp observed in contributing 1km cells."
+        tests:
+          - not_null:
+              config:
+                name: feat_h3_pop_r7__last_load_ts_not_null

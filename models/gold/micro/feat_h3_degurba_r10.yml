@@ -1,0 +1,83 @@
+version: 2
+
+models:
+  - name: feat_h3_degurba_r10
+    description: >
+      DEGURBA attribution on dense H3 R10 grid (DIM-driven).
+      Cell center is tested against LAU polygons via ST_CONTAINS.
+      If multiple LAUs match a cell, pick latest by (year desc, load_ts desc).
+      Nulls are allowed if no LAU polygon covers the cell.
+
+      Grain: (region_code, h3_r10).
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_degurba_r10__rowcount_gt_0}
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10]
+          config: {name: feat_h3_degurba_r10__uk_region_h3}
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              config: {name: feat_h3_degurba_r10__h3_is_hex}
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              config: {name: feat_h3_degurba_r10__cell_area_non_negative}
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config: {name: feat_h3_degurba_r10__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POLYGON","MULTIPOLYGON"]
+              config: {name: feat_h3_degurba_r10__cell_wkt_prefix_polygonal}
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config: {name: feat_h3_degurba_r10__center_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POINT"]
+              config: {name: feat_h3_degurba_r10__center_wkt_prefix_point}
+
+      - name: degurba
+        tests:
+          - values_in_or_null:
+              arguments:
+                column_name: degurba
+                values: [1, 2, 3]
+              config: {name: feat_h3_degurba_r10__degurba_allowed_1_2_3_or_null}
+
+      - name: degurba_1_city
+        tests:
+          - values_in_or_null:
+              arguments: {column_name: degurba_1_city, values: [0, 1]}
+              config: {name: feat_h3_degurba_r10__degurba_1_0_1}
+
+      - name: degurba_2_towns_suburbs
+        tests:
+          - values_in_or_null:
+              arguments: {column_name: degurba_2_towns_suburbs, values: [0, 1]}
+              config: {name: feat_h3_degurba_r10__degurba_2_0_1}
+
+      - name: degurba_3_rural
+        tests:
+          - values_in_or_null:
+              arguments: {column_name: degurba_3_rural, values: [0, 1]}
+              config: {name: feat_h3_degurba_r10__degurba_3_0_1}
+
+      - name: last_load_ts
+        description: "Nullable if no LAU match for the cell."

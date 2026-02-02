@@ -3,115 +3,79 @@ version: 2
 models:
   - name: lau_degurba
     description: >
-      Eurostat LAU + DEGURBA enrichment (SILVER). Source: BRONZE.EUROSTAT_LAU_DEGURBA.
-      Grain: (cntr_code, lau_id, year) with latest record kept by (load_ts desc, source_file desc).
-      Geometry is stored as:
-        - geom_wkt_raw (raw input WKT from source)
-        - geog (GEOGRAPHY parsed via wkt_to_geog strict/allow fallback)
-        - geom_wkt_4326 (debug WKT derived from geog)
-      Includes DEGURBA class (degurba) and basic metadata fields.
+      SILVER.LAU_DEGURBA — Eurostat LAU polygons with DEGURBA classification.
+      Region attribution is derived via spatial join to SILVER.ADMIN_AREAS
+      using ONLY administrative boundaries (admin_level=4, boundary='administrative'),
+      matched by LAU polygon centroid.
+
+      Geometry is stored as GEOGRAPHY with debug WKT; invalid geometries are not "fixed" in SILVER,
+      only flagged via is_valid.
 
     tests:
       - rowcount_gt_0:
-          config:
-            name: lau_degurba__rowcount_gt_0
+          config: { name: lau_degurba__rowcount_gt_0 }
+
+      - not_empty:
+          config: { name: lau_degurba__not_empty }
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [cntr_code, lau_id, year]
+          config: { name: lau_degurba__uk_cntr_lau_year }
 
     columns:
       - name: feature_id
-        description: "Stable key: LAU:<cntr_code>:<lau_id>:<year>."
-        tests:
-          - not_null
-          - unique
-
-      - name: gisco_id
-        description: "GISCO identifier from source (nullable depending on dataset)."
+        description: "Stable synthetic key: LAU:<cntr_code>:<lau_id>:<year>"
+        tests: [not_null, unique]
 
       - name: cntr_code
-        description: "Country code (e.g., PL, DE)."
-        tests:
-          - not_null
+        tests: [not_null]
 
       - name: lau_id
-        description: "LAU identifier within a country."
-        tests:
-          - not_null
+        tests: [not_null]
 
-      - name: lau_name
-        description: "LAU name from source (nullable)."
+      - name: year
+        tests: [not_null]
 
       - name: degurba
-        description: >
-          DEGURBA class (Degree of Urbanisation). Expected to be a small integer class.
-          Note: allow nulls if source doesn't provide it for some records.
+        description: "DEGURBA class (1=city, 2=towns/suburbs, 3=rural)."
         tests:
           - values_in_or_null:
               arguments:
                 column_name: degurba
-                values: ['0', '1', '2', '3', '9']
-              config:
-                name: lau_degurba__degurba_in_1_2_3_or_null
+                values: [1, 2, 3]
+              config: { name: lau_degurba__degurba_allowed_1_2_3_or_null }
 
-      - name: fid
-        description: "Source feature id (numeric)."
+      - name: region_code
+        description: "Derived from admin_areas (admin_level=4, administrative boundary). Nullable if no match yet."
 
-      - name: year
-        description: "Reference year of the dataset."
-        tests:
-          - not_null
-
-      - name: geom_wkt_raw
-        description: "Raw WKT from source (string)."
-        tests:
-          - not_null
-          - wkt_not_empty:
-              arguments:
-                column_name: geom_wkt_raw
-              config:
-                name: lau_degurba__geom_wkt_raw_not_empty
-          - wkt_prefix_any:
-              arguments:
-                column_name: geom_wkt_raw
-                prefixes: ['POLYGON(', 'MULTIPOLYGON(']
-              config:
-                name: lau_degurba__geom_wkt_raw_polygonal_prefix
+      - name: region
+        description: "Derived from admin_areas (admin_level=4, administrative boundary). Nullable if no match yet."
 
       - name: geog
-        description: "Parsed GEOGRAPHY geometry (WGS84)."
+        description: "LAU polygon as Snowflake GEOGRAPHY (WGS84)."
         tests:
           - not_null
           - geog_is_polygonal:
-              arguments:
-                column_name: geog
-              config:
-                name: lau_degurba__geog_is_polygonal
+              column_name: geog
+              config: { name: lau_degurba__geog_is_polygonal }
 
       - name: geom_wkt_4326
-        description: "WKT representation derived from geog (debug/inspection)."
+        description: "WKT representation of GEOGRAPHY (debug/inspection)."
         tests:
           - not_null
           - wkt_not_empty:
-              arguments:
-                column_name: geom_wkt_4326
-              config:
-                name: lau_degurba__geom_wkt_4326_not_empty
+              column_name: geom_wkt_4326
+              config: { name: lau_degurba__geom_wkt_not_empty }
           - wkt_prefix_any:
-              arguments:
-                column_name: geom_wkt_4326
-                prefixes: ['POLYGON(', 'MULTIPOLYGON(']
-              config:
-                name: lau_degurba__geom_wkt_4326_polygonal_prefix
+              column_name: geom_wkt_4326
+              prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config: { name: lau_degurba__geom_wkt_prefix_polygonal }
 
       - name: is_valid
-        description: "Result of ST_ISVALID(geog) computed in-model (boolean)."
-        tests:
-          - not_null
+        description: "ST_ISVALID(geog). Used for monitoring; invalid geometries are not fixed in SILVER."
 
       - name: source_file
-        description: "Source file path for lineage/debug."
-        tests:
-          - not_null
+        tests: [not_null]
 
       - name: load_ts
-        description: "Ingestion/load timestamp used for deduplication."
-        tests:
-          - not_null
+        tests: [not_null]

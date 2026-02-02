@@ -2,7 +2,7 @@
     materialized='dynamic_table',
     target_lag='48 hours',
     snowflake_warehouse='COMPUTE_WH',
-    cluster_by=['region_code','h3_r10']
+    cluster_by=['region_code','h3_r7']
 ) }}
 
 with r as (
@@ -28,8 +28,8 @@ with r as (
 typed as (
   select
     r.*,
-    {{ h3_r10_from_geog_centroid('geog') }}::string as h3_r10,
-    st_length(geog)::float                           as length_m,
+    {{ h3_r7_from_geog_centroid('geog') }}::string as h3_r7,
+    st_length(geog)::float                          as length_m,
 
     lower(highway) as highway_lc,
 
@@ -48,19 +48,18 @@ typed as (
         true, false
     ) as is_major
   from r
-  where {{ h3_r10_from_geog_centroid('geog') }} is not null
+  where {{ h3_r7_from_geog_centroid('geog') }} is not null
 ),
 
 agg as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
 
     count(*)                                    as road_segments_cnt,
     sum(length_m)                               as roads_len_m_sum,
     sum(iff(is_major, length_m, 0))             as roads_major_len_m_sum,
 
-    -- optional bucket sums (keep; useful for scoring/debug)
     sum(iff(road_class='motorway',     length_m, 0)) as motorway_length_m_sum,
     sum(iff(road_class='trunk',        length_m, 0)) as trunk_length_m_sum,
     sum(iff(road_class='primary',      length_m, 0)) as primary_length_m_sum,
@@ -90,26 +89,26 @@ agg as (
 dim as (
   select
     region_code::string as region_code,
-    h3_r10::string      as h3_r10,
+    h3_r7::string       as h3_r7,
     cell_area_m2,
     cell_wkt_4326,
     cell_center_wkt_4326
-  from {{ ref('dim_h3_r10_cells') }}
+  from {{ ref('dim_h3_r7_cells') }}
   where region_code is not null
-    and h3_r10 is not null
+    and h3_r7 is not null
     and cell_area_m2 is not null
     and cell_area_m2 > 0
 )
 
 select
   d.region_code,
-  d.h3_r10,
+  d.h3_r7,
 
   d.cell_area_m2,
   d.cell_wkt_4326,
   d.cell_center_wkt_4326,
 
-  iff(a.h3_r10 is null, false, true) as has_roads,
+  iff(a.h3_r7 is null, false, true) as has_roads,
 
   coalesce(a.road_segments_cnt, 0)      as road_segments_cnt,
   coalesce(a.roads_len_m_sum, 0)        as roads_len_m_sum,
@@ -123,7 +122,6 @@ select
   coalesce(a.residential_length_m_sum, 0)  as residential_length_m_sum,
   coalesce(a.service_length_m_sum, 0)      as service_length_m_sum,
 
-  -- distributions: keep NULL when has_roads=false
   a.lanes_avg,
   a.lanes_p50,
   a.maxspeed_kph_avg,
@@ -135,15 +133,14 @@ select
   coalesce(a.bridge_cnt, 0) as bridge_cnt,
   coalesce(a.tunnel_cnt, 0) as tunnel_cnt,
 
-  -- densities per km2 (cell area)
   coalesce(a.road_segments_cnt,0) / nullif(d.cell_area_m2 / 1e6, 0) as road_segments_per_km2,
   coalesce(a.roads_len_m_sum,0)   / nullif(d.cell_area_m2 / 1e6, 0) as roads_len_m_per_km2,
   coalesce(a.roads_major_len_m_sum,0) / nullif(d.cell_area_m2 / 1e6, 0) as roads_major_len_m_per_km2,
 
-  'road_segments_to_h3_r10'::string as road_method,
+  'road_segments_to_h3_r7'::string as road_method,
 
   a.last_load_ts
 from dim d
 left join agg a
   on a.region_code = d.region_code
- and a.h3_r10      = d.h3_r10
+ and a.h3_r7       = d.h3_r7

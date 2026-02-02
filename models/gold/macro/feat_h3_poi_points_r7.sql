@@ -2,14 +2,14 @@
     materialized='dynamic_table',
     target_lag='48 hours',
     snowflake_warehouse='COMPUTE_WH',
-    cluster_by=['region_code','h3_r10']
+    cluster_by=['region_code','h3_r7']
 ) }}
 
 with p as (
   select
     region_code::string as region_code,
     region::string      as region,
-    h3_point_to_cell_string(geog, 10)::string as h3_r10,
+    h3_point_to_cell_string(geog, 7)::string as h3_r7,
     lower(poi_class::string) as poi_class,
     lower(poi_type::string)  as poi_type,
     load_ts::timestamp_ntz   as load_ts
@@ -24,7 +24,7 @@ agg as (
   select
     region_code,
     region,
-    h3_r10,
+    h3_r7,
 
     count(*)                  as poi_points_cnt,
     count(distinct poi_class) as poi_classes_cnt,
@@ -52,34 +52,33 @@ agg as (
 
     max(load_ts) as last_load_ts
   from p
-  where h3_r10 is not null
+  where h3_r7 is not null
   group by 1,2,3
 ),
 
 cells as (
   select
     region_code::string as region_code,
-    --region::string      as region,
-    h3_r10::string      as h3_r10,
+   -- region::string      as region,
+    h3_r7::string       as h3_r7,
     cell_area_m2,
     cell_wkt_4326,
     cell_center_wkt_4326
-  from {{ ref('dim_h3_r10_cells') }}
+  from {{ ref('dim_h3_r7_cells') }}
   where region_code is not null
---   and region is not null
-    and h3_r10 is not null
+--    and region is not null
+    and h3_r7 is not null
 )
 
 select
   c.region_code,
   a.region,
-  c.h3_r10,
+  c.h3_r7,
 
   c.cell_area_m2,
   c.cell_wkt_4326,
   c.cell_center_wkt_4326,
 
-  /* counts: 0 for empty cells */
   coalesce(a.poi_points_cnt, 0) as poi_points_cnt,
   coalesce(a.poi_classes_cnt, 0) as poi_classes_cnt,
   coalesce(a.poi_types_cnt, 0) as poi_types_cnt,
@@ -104,15 +103,13 @@ select
   coalesce(a.lodging_cnt, 0) as lodging_cnt,
   coalesce(a.health_cnt, 0) as health_cnt,
 
-  /* densities per km² (hex area) */
   coalesce(a.poi_points_cnt, 0) / nullif(c.cell_area_m2 / 1e6, 0.0) as poi_points_per_km2,
   coalesce(a.parking_cnt, 0)    / nullif(c.cell_area_m2 / 1e6, 0.0) as parking_per_km2,
   coalesce(a.mobility_services_cnt, 0) / nullif(c.cell_area_m2 / 1e6, 0.0) as mobility_services_per_km2,
 
-  /* last_load_ts is NULL for empty cells (expected) */
   a.last_load_ts
 from cells c
 left join agg a
   on a.region_code = c.region_code
 -- and a.region      = c.region
- and a.h3_r10      = c.h3_r10
+ and a.h3_r7       = c.h3_r7
