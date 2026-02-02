@@ -2,13 +2,13 @@
     materialized='dynamic_table',
     target_lag='48 hours',
     snowflake_warehouse='COMPUTE_WH',
-    cluster_by=['region_code','h3_r10']
+    cluster_by=['region_code','h3_r7']
 ) }}
 
 with base as (
   select
     region_code::string as region_code,
-    {{ h3_r10_from_geog_centroid('geog') }}::string as h3_r10,
+    h3_point_to_cell_string(st_centroid(geog), 7)::string as h3_r7,
     lower(poi_class)::string as poi_class,
     lower(poi_type)::string  as poi_type,
     load_ts::timestamp_ntz   as load_ts
@@ -21,7 +21,7 @@ with base as (
 agg as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
 
     count(*) as poi_areas_cnt,
     count_if(poi_class = 'amenity')  as amenity_areas_cnt,
@@ -35,31 +35,30 @@ agg as (
 
     max(load_ts) as last_load_ts
   from base
-  where h3_r10 is not null
+  where h3_r7 is not null
   group by 1,2
 ),
 
 cells as (
   select
     region_code::string as region_code,
-    h3_r10::string      as h3_r10,
+    h3_r7::string       as h3_r7,
     cell_area_m2,
     cell_wkt_4326,
     cell_center_wkt_4326
-  from {{ ref('dim_h3_r10_cells') }}
+  from {{ ref('dim_h3_r7_cells') }}
   where region_code is not null
-    and h3_r10 is not null
+    and h3_r7 is not null
 )
 
 select
   c.region_code,
-  c.h3_r10,
+  c.h3_r7,
 
   c.cell_area_m2,
   c.cell_wkt_4326,
   c.cell_center_wkt_4326,
 
-  /* counts: 0 for empty cells */
   coalesce(a.poi_areas_cnt, 0)        as poi_areas_cnt,
   coalesce(a.amenity_areas_cnt, 0)    as amenity_areas_cnt,
   coalesce(a.shop_areas_cnt, 0)       as shop_areas_cnt,
@@ -70,7 +69,6 @@ select
   coalesce(a.building_areas_cnt, 0)   as building_areas_cnt,
   coalesce(a.landuse_areas_cnt, 0)    as landuse_areas_cnt,
 
-  /* densities per km2 (hex area) */
   coalesce(a.poi_areas_cnt, 0)        / nullif(c.cell_area_m2 / 1e6, 0) as poi_areas_per_km2,
   coalesce(a.amenity_areas_cnt, 0)    / nullif(c.cell_area_m2 / 1e6, 0) as amenity_areas_per_km2,
   coalesce(a.shop_areas_cnt, 0)       / nullif(c.cell_area_m2 / 1e6, 0) as shop_areas_per_km2,
@@ -79,9 +77,8 @@ select
   coalesce(a.leisure_areas_cnt, 0)    / nullif(c.cell_area_m2 / 1e6, 0) as leisure_areas_per_km2,
   coalesce(a.sport_areas_cnt, 0)      / nullif(c.cell_area_m2 / 1e6, 0) as sport_areas_per_km2,
 
-  /* NULL for empty cells is expected */
   a.last_load_ts
 from cells c
 left join agg a
   on a.region_code = c.region_code
- and a.h3_r10      = c.h3_r10
+ and a.h3_r7       = c.h3_r7
