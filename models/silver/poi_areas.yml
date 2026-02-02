@@ -6,31 +6,49 @@ models:
       Canonical POI polygons (areas) built from OSM-derived source POI_POLYGONS.
       Each record is classified into a high-level poi_class and poi_type.
       Geometry is parsed into GEOGRAPHY (WGS84) and exported to WKT for debug.
-      Deduplicated by feature_id (latest load_ts/source_file wins).
+      Wide canonical table (no whitelists/blacklists here).
+      Grain: (region_code, region, feature_id) latest by load_ts then source_file.
 
     tests:
       - rowcount_gt_0:
           config:
             name: poi_areas__rowcount_gt_0
 
-      # model-level: requires at least one of (osm_id, osm_way_id)
       - osm_id_or_way_id_present:
           config:
             name: poi_areas__osm_id_or_way_id_present
 
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, feature_id]
+          config:
+            name: poi_areas__uk_region_region_feature
+
+      - dbt_utils.expression_is_true:
+          expression: "region_code is not null and trim(region_code) <> ''"
+          config:
+            name: poi_areas__region_code_not_empty
+
+      - dbt_utils.expression_is_true:
+          expression: "region is not null and trim(region) <> ''"
+          config:
+            name: poi_areas__region_not_empty
+
+      - dbt_utils.expression_is_true:
+          expression: "poi_type is not null and trim(poi_type) <> ''"
+          config:
+            name: poi_areas__poi_type_not_empty
+
     columns:
       - name: feature_id
-        description: >
-          Stable POI feature key. Prefer OSM node id when present, otherwise derived from OSM way id.
+        description: "Stable POI feature id: 'N' || osm_id or 'W' || osm_way_id."
         tests:
           - not_null
-          - unique
 
       - name: osm_id
-        description: "OSM node id when the POI originates from a node. Nullable."
+        description: "OSM node id when POI originates from a node. Nullable."
 
       - name: osm_way_id
-        description: "OSM way id when the POI originates from a way. Nullable."
+        description: "OSM way id when POI originates from a way. Nullable."
 
       - name: name
         description: "OSM name tag (if present). Nullable."
@@ -42,18 +60,15 @@ models:
         tests:
           - not_null
           - values_in_or_null:
+              column_name: poi_class
               values: ["amenity","shop","tourism","office","leisure","sport","building","landuse"]
               config:
-                name: poi_areas__poi_class_in_allowlist_or_null
+                name: poi_areas__poi_class_allowed
 
       - name: poi_type
         description: "Specific POI type value (e.g., amenity=restaurant, shop=supermarket)."
         tests:
           - not_null
-          - wkt_not_empty:
-              column_name: poi_type
-              config:
-                name: poi_areas__poi_type_not_empty
 
       - name: geog
         description: "POI polygon as Snowflake GEOGRAPHY (WGS84)."
@@ -71,15 +86,26 @@ models:
           - wkt_not_empty:
               column_name: geom_wkt_4326
               config:
-                name: poi_areas__geom_wkt_4326_not_empty
+                name: poi_areas__geom_wkt_not_empty
           - wkt_prefix_any:
               column_name: geom_wkt_4326
               prefixes: ["POLYGON", "MULTIPOLYGON"]
               config:
-                name: poi_areas__geom_wkt_4326_prefix_poly_or_mpoly
+                name: poi_areas__geom_wkt_prefix_polygonal
+
+      - name: centroid_geog
+        description: "Centroid point of the POI polygon (GEOGRAPHY)."
+
+      - name: area_m2
+        description: "Area of POI polygon in m² (from GEOGRAPHY)."
 
       - name: region_code
-        description: "Region/country code from ingestion (e.g., poland, germany)."
+        description: "Country/region code from ingestion (lowercased)."
+        tests:
+          - not_null
+
+      - name: region
+        description: "Region string (e.g., voivodeship/state)."
         tests:
           - not_null
 

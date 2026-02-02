@@ -1,0 +1,138 @@
+version: 2
+
+models:
+  - name: feat_h3_poi_areas_r10_xarea_classbuckets
+    description: >
+      Sparse H3 R10 POI-areas feature mart (CENTROID → XAREA).
+      Assigns each POI polygon to the H3 R10 cell by centroid, then computes intersection area within that cell.
+      Aggregates by (region_code, h3_r10). Not polyfill.
+
+      Invalid geometries are tolerated upstream; here we filter by poi_xarea_m2 > 0.
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__rowcount_gt_0}
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10]
+          config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__uk_region_h3}
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "cell_area_m2 is not null and cell_area_m2 > 0"
+          config:
+            name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_area_gt_0
+            severity: error
+
+      # overlap explosions monitor (оставляем как у тебя)
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "poi_xarea_share is null or poi_xarea_share <= 5"
+          config:
+            name: feat_h3_poi_areas_r10_xarea_classbuckets__poi_xarea_share_le_5
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__h3_is_hex}
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_area_non_negative}
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__cell_wkt_prefix_polygon}
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__center_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                prefixes: ["POINT"]
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__center_wkt_prefix_point}
+
+      - name: has_poi_areas
+        tests: [not_null]
+
+      - name: poi_areas_cnt
+        tests:
+          - not_null
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__poi_areas_cnt_non_negative}
+
+      - name: poi_xarea_m2_sum
+        tests:
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__poi_xarea_sum_non_negative}
+
+      - name: poi_xarea_share
+        tests:
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets__poi_xarea_share_non_negative}
+
+      - name: last_load_ts
+        tests: [not_null]
+
+  - name: feat_h3_poi_areas_r10_xarea_classbuckets_dense
+    description: >
+      Dense ML-ready version of feat_h3_poi_areas_r10_xarea_classbuckets.
+      One row per (region_code, h3_r10) for all DIM_H3_R10_CELLS.
+      Numeric metrics are filled with zeros when no POI polygons exist.
+      last_load_ts is NULL for empty cells; has_poi_areas is FALSE for those cells.
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__rowcount_gt_0}
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r10]
+          config: {name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__uk_region_h3}
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(has_poi_areas = false and last_load_ts is null) or (has_poi_areas = true and last_load_ts is not null)"
+          config:
+            name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__coverage_last_load_ts_consistency
+            severity: error
+            warn_if: "> 0"
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r10
+        tests:
+          - not_null
+          - is_h3_hex:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__h3_is_hex}
+
+      - name: has_poi_areas
+        tests: [not_null]
+
+      - name: poi_areas_cnt
+        tests:
+          - not_null
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r10_xarea_classbuckets_dense__poi_areas_cnt_non_negative}
+
+      - name: last_load_ts
+        description: "Nullable for empty cells (dense grid)."

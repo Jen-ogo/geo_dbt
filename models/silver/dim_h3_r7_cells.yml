@@ -1,0 +1,77 @@
+version: 2
+
+models:
+  - name: dim_h3_r7_cells
+    description: >
+      Dimension table for H3 resolution 7 cells used across the project.
+      Built independently (does NOT depend on dim_h3_r10_cells): we collect all H3 R7 indexes
+      referenced by core SILVER entities (EV chargers, roads, POIs, transit, activity places),
+      then materialize canonical cell geometry (boundary + center), WKT debug columns and cell area in m².
+
+    tests:
+      - rowcount_gt_0:
+          config:
+            name: dim_h3_r7_cells__rowcount_gt_0
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r7]
+          config:
+            name: dim_h3_r7_cells__uk_region_h3_r7
+
+    columns:
+      - name: region_code
+        description: "Region/country code coming from upstream models."
+        tests: [not_null]
+
+      - name: h3_r7
+        description: "H3 cell index (resolution 7) as lowercase hex string."
+        tests:
+          - not_null
+          - is_h3_hex:
+              column_name: h3_r7
+              config:
+                name: dim_h3_r7_cells__h3_r7_is_hex
+
+      - name: cell_geog
+        description: "H3 cell boundary as GEOGRAPHY polygon."
+        tests: [not_null]
+
+      - name: cell_wkt_4326
+        description: "WKT representation of cell_geog (debug/inspection). Expected polygonal."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_wkt_4326
+              config:
+                name: dim_h3_r7_cells__cell_wkt_not_empty
+          - wkt_prefix_any:
+              column_name: cell_wkt_4326
+              prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config:
+                name: dim_h3_r7_cells__cell_wkt_prefix_polygonal
+
+      - name: cell_area_m2
+        description: "Cell area (m²) computed from the boundary GEOGRAPHY."
+        tests:
+          - non_negative:
+              column_name: cell_area_m2
+              config:
+                name: dim_h3_r7_cells__cell_area_non_negative
+
+      - name: cell_center_geog
+        description: "H3 cell center point as GEOGRAPHY."
+        tests: [not_null]
+
+      - name: cell_center_wkt_4326
+        description: "WKT representation of cell_center_geog (debug/inspection). Expected point."
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_center_wkt_4326
+              config:
+                name: dim_h3_r7_cells__center_wkt_not_empty
+          - wkt_prefix_any:
+              column_name: cell_center_wkt_4326
+              prefixes: ["POINT"]
+              config:
+                name: dim_h3_r7_cells__center_wkt_prefix_point
