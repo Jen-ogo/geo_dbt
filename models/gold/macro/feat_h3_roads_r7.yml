@@ -1,0 +1,131 @@
+version: 2
+
+models:
+  - name: feat_h3_roads_r7
+    description: >
+      Dense roads feature mart on H3 R7 (Databricks-aligned).
+      Base grid = DIM_H3_R7_CELLS, with LEFT JOIN aggregation of ROAD_SEGMENTS by H3 centroid.
+      One row per (region_code, h3_r7) for all cells in the dim; has_roads indicates coverage.
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_roads_r7__rowcount_gt_0}
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r7]
+          config: {name: feat_h3_roads_r7__uk_region_h3}
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(has_roads = false and last_load_ts is null) or (has_roads = true and last_load_ts is not null)"
+          config:
+            name: feat_h3_roads_r7__has_roads_last_load_ts_consistency
+            severity: error
+            warn_if: "> 0"
+
+      - num_between_or_null:
+          column_name: oneway_share
+          min_value: 0
+          max_value: 1
+          config:
+            name: feat_h3_roads_r7__oneway_share_0_1_warn
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+      - num_between_or_null:
+          column_name: lit_share
+          min_value: 0
+          max_value: 1
+          config:
+            name: feat_h3_roads_r7__lit_share_0_1_warn
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              column_name: h3_r7
+              config: {name: feat_h3_roads_r7__h3_is_hex}
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - num_gt_0:
+              config: {name: feat_h3_roads_r7__cell_area_gt_0}
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_wkt_4326
+              config: {name: feat_h3_roads_r7__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              column_name: cell_wkt_4326
+              prefixes: ["POLYGON", "MULTIPOLYGON"]
+              config: {name: feat_h3_roads_r7__cell_wkt_prefix_polygon}
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              column_name: cell_center_wkt_4326
+              config: {name: feat_h3_roads_r7__center_wkt_not_empty}
+          - wkt_prefix_any:
+              column_name: cell_center_wkt_4326
+              prefixes: ["POINT"]
+              config: {name: feat_h3_roads_r7__center_wkt_prefix_point}
+
+      - name: has_roads
+        tests: [not_null]
+
+      - name: road_segments_cnt
+        tests:
+          - not_null
+          - non_negative:
+              column_name: road_segments_cnt
+              config: {name: feat_h3_roads_r7__segments_cnt_non_negative}
+
+      - name: roads_len_m_sum
+        tests:
+          - not_null
+          - non_negative:
+              column_name: roads_len_m_sum
+              config: {name: feat_h3_roads_r7__len_sum_non_negative}
+
+      - name: roads_major_len_m_sum
+        tests:
+          - not_null
+          - non_negative:
+              column_name: roads_major_len_m_sum
+              config: {name: feat_h3_roads_r7__major_len_sum_non_negative}
+
+      - name: bridge_cnt
+        tests:
+          - not_null
+          - non_negative:
+              column_name: bridge_cnt
+              config: {name: feat_h3_roads_r7__bridge_cnt_non_negative}
+
+      - name: tunnel_cnt
+        tests:
+          - not_null
+          - non_negative:
+              column_name: tunnel_cnt
+              config: {name: feat_h3_roads_r7__tunnel_cnt_non_negative}
+
+      - name: road_method
+        tests:
+          - values_in_or_null:
+              column_name: road_method
+              values: ["road_segments_to_h3_r7"]
+              config: {name: feat_h3_roads_r7__road_method_allowed}
+
+      - name: last_load_ts
+        description: "NULL for cells without roads (dense grid)."

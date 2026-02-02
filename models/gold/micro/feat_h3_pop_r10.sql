@@ -6,46 +6,73 @@
 ) }}
 
 with grid as (
-  -- 1km census grid cells already attributed to admin4 + has H3 (from centroid) but
-  -- we DO NOT use that centroid H3; we will polyfill the whole cell polygon into H3 R10.
   select
-    grid_id::string           as grid_id,
+    grid_id::string            as grid_id,
     admin4_region_code::string as region_code,
-    admin4_osm_id::string     as admin4_osm_id,
-    admin4_name::string       as admin4_name,
+    admin4_osm_id::string      as admin4_osm_id,
+    admin4_name::string        as admin4_name,
 
-    pop_total::number         as pop_total,
-    pop_male::number          as pop_male,
-    pop_female::number        as pop_female,
-    pop_age_lt15::number      as pop_age_lt15,
-    pop_age_1564::number      as pop_age_1564,
-    pop_age_ge65::number      as pop_age_ge65,
-    emp_total::number         as emp_total,
+    pop_total::float    as pop_total,
+    pop_male::float     as pop_male,
+    pop_female::float   as pop_female,
+    pop_age_lt15::float as pop_age_lt15,
+    pop_age_1564::float as pop_age_1564,
+    pop_age_ge65::float as pop_age_ge65,
+    emp_total::float    as emp_total,
 
-    cell_geog                 as cell_geog,
-    st_area(cell_geog)        as cell_area_m2,
+    cell_geog           as grid_geog,
+    st_area(cell_geog)::float as grid_area_m2,
 
-    source_file::string       as source_file,
-    load_ts::timestamp_ntz    as load_ts
+    source_file::string     as source_file,
+    load_ts::timestamp_ntz  as load_ts
   from {{ ref('census_grid_2021_admin4') }}
   where cell_geog is not null
-    and region_code is not null
+    and admin4_region_code is not null
+    and grid_id is not null
+    and pop_total is not null
 ),
 
-h3_candidates as (
-  -- IMPORTANT:
-  -- Snowflake H3_POLYFILL is expected to return an array (flatten it).
-  -- If your account returns H3 indexes as INT, just adjust casts in one place below.
+-- H3_COVERAGE_STRINGS each 1km cell polygon into candidate H3 R10 cells
+candidates as (
   select
     g.*,
     f.value::string as h3_r10
   from grid g,
-       lateral flatten(input => h3_polyfill(g.cell_geog, 10)) f
+       lateral flatten(input => h3_coverage_strings(g.grid_geog, 10)) f
   where f.value is not null
 ),
 
-h3_weighted as (
-  -- allocate grid metrics to each H3 by intersection area share
+cand_with_cells as (
+  select
+    c.region_code,
+    c.admin4_osm_id,
+    c.admin4_name,
+    c.grid_id,
+    c.h3_r10,
+
+    c.pop_total,
+    c.pop_male,
+    c.pop_female,
+    c.pop_age_lt15,
+    c.pop_age_1564,
+    c.pop_age_ge65,
+    c.emp_total,
+
+    c.grid_geog,
+    c.grid_area_m2,
+
+    d.cell_geog as h3_cell_geog,
+    c.source_file,
+    c.load_ts
+  from candidates c
+  join {{ ref('dim_h3_r10_cells') }} d
+    on d.region_code = c.region_code
+   and d.h3_r10      = c.h3_r10
+  where d.cell_geog is not null
+    and st_intersects(c.grid_geog, d.cell_geog)
+),
+
+weighted as (
   select
     region_code,
     admin4_osm_id,
@@ -53,13 +80,8 @@ h3_weighted as (
     grid_id,
     h3_r10,
 
-    cell_geog,
-    cell_area_m2,
-
-    h3_cell_to_boundary(h3_r10) as h3_cell_geog,
-    st_area(
-      st_intersection(cell_geog, h3_cell_to_boundary(h3_r10))
-    ) as inter_area_m2,
+    grid_area_m2,
+    st_area(st_intersection(grid_geog, h3_cell_geog))::float as inter_area_m2,
 
     pop_total,
     pop_male,
@@ -69,12 +91,11 @@ h3_weighted as (
     pop_age_ge65,
     emp_total,
 
-    source_file,
     load_ts
-  from h3_candidates
+  from cand_with_cells
 ),
 
-h3_alloc as (
+alloc as (
   select
     region_code,
     admin4_osm_id,
@@ -83,9 +104,9 @@ h3_alloc as (
     h3_r10,
 
     inter_area_m2,
-    cell_area_m2,
+    grid_area_m2,
 
-    iff(cell_area_m2 > 0, inter_area_m2 / cell_area_m2, null) as w,
+    iff(grid_area_m2 > 0, inter_area_m2 / grid_area_m2, null) as w,
 
     pop_total,
     pop_male,
@@ -95,13 +116,12 @@ h3_alloc as (
     pop_age_ge65,
     emp_total,
 
-    source_file,
     load_ts
-  from h3_weighted
+  from weighted
   where inter_area_m2 is not null
     and inter_area_m2 > 0
-    and cell_area_m2 is not null
-    and cell_area_m2 > 0
+    and grid_area_m2 is not null
+    and grid_area_m2 > 0
 ),
 
 agg as (
@@ -136,30 +156,17 @@ agg as (
 
     count(distinct grid_id) as grid_cells_cnt,
     max(load_ts) as last_load_ts
-  from h3_alloc
-  where h3_r10 is not null
+  from alloc
   group by 1,2,3,4
-),
-
-cell as (
-  select distinct
-    region_code,
-    h3_r10,
-    h3_cell_to_boundary(h3_r10)         as cell_geog,
-    st_aswkt(h3_cell_to_boundary(h3_r10)) as cell_wkt_4326,
-    st_area(h3_cell_to_boundary(h3_r10))  as cell_area_m2,
-    h3_cell_to_point(h3_r10)            as cell_center_geog,
-    st_aswkt(h3_cell_to_point(h3_r10))   as cell_center_wkt_4326
-  from agg
 )
 
 select
   a.region_code,
   a.h3_r10,
 
-  c.cell_area_m2,
-  c.cell_wkt_4326,
-  c.cell_center_wkt_4326,
+  d.cell_area_m2,
+  d.cell_wkt_4326,
+  d.cell_center_wkt_4326,
 
   a.admin4_osm_id,
   a.admin4_name,
@@ -177,9 +184,20 @@ select
   a.share_emp,
 
   a.grid_cells_cnt,
+  (a.grid_cells_cnt * 1000000)::number as support_area_m2,
+
+  'census_grid_1km_polyfill_xarea_admin4'::string as pop_method,
+
+  -- densities by GRID support (km²)
+  a.pop_total / nullif(a.grid_cells_cnt, 0) as pop_per_km2_support,
+  a.emp_total / nullif(a.grid_cells_cnt, 0) as emp_per_km2_support,
+
+  -- densities by HEX area (km²)
+  a.pop_total / nullif(d.cell_area_m2 / 1e6, 0) as pop_per_km2_hex,
+  a.emp_total / nullif(d.cell_area_m2 / 1e6, 0) as emp_per_km2_hex,
+
   a.last_load_ts
 from agg a
-join cell c
-  on c.region_code = a.region_code
- and c.h3_r10 = a.h3_r10
-;
+join {{ ref('dim_h3_r10_cells') }} d
+  on d.region_code = a.region_code
+ and d.h3_r10      = a.h3_r10

@@ -1,19 +1,19 @@
 version: 2
 
 models:
-  - name: feat_h3_poi_points_r10
+  - name: feat_h3_poi_points_r7
     description: >
-      POI points micro-mart on H3 R10 (dense grid).
-      Built in GOLD by aggregating SILVER.POI_POINTS into H3 R10, then left-joining onto
-      SILVER.DIM_H3_R10_CELLS to keep all cells (empty cells have zero counts).
-      Grain: (region_code, region, h3_r10).
+      POI points micro-mart on H3 R7 (dense grid).
+      Built in GOLD by aggregating SILVER.POI_POINTS into H3 R7, then left-joining onto
+      SILVER.DIM_H3_R7_CELLS to keep all cells (empty cells have zero counts).
+      Grain: (region_code, region, h3_r7).
 
     tests:
       - rowcount_gt_0:
-          config: {name: feat_h3_poi_points_r10__rowcount_gt_0}
+          config: {name: feat_h3_poi_points_r7__rowcount_gt_0}
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns: [region_code, region, h3_r10]
-          config: {name: feat_h3_poi_points_r10__uk_region_region_h3}
+          combination_of_columns: [region_code, region, h3_r7]
+          config: {name: feat_h3_poi_points_r7__uk_region_region_h3}
 
     columns:
       - name: region_code
@@ -22,65 +22,65 @@ models:
       - name: region
         tests: [not_null]
 
-      - name: h3_r10
+      - name: h3_r7
         tests:
           - not_null
           - is_h3_hex:
-              column_name: h3_r10
-              config: {name: feat_h3_poi_points_r10__h3_is_hex}
+              column_name: h3_r7
+              config: {name: feat_h3_poi_points_r7__h3_is_hex}
 
       - name: cell_area_m2
         tests:
           - not_null
           - num_gt_0:
-              config: {name: feat_h3_poi_points_r10__cell_area_gt_0}
+              config: {name: feat_h3_poi_points_r7__cell_area_gt_0}
 
       - name: cell_wkt_4326
         tests:
           - not_null
           - wkt_not_empty:
               column_name: cell_wkt_4326
-              config: {name: feat_h3_poi_points_r10__cell_wkt_not_empty}
+              config: {name: feat_h3_poi_points_r7__cell_wkt_not_empty}
           - wkt_prefix_any:
               column_name: cell_wkt_4326
               prefixes: ["POLYGON", "MULTIPOLYGON"]
-              config: {name: feat_h3_poi_points_r10__cell_wkt_prefix_polygonal}
+              config: {name: feat_h3_poi_points_r7__cell_wkt_prefix_polygonal}
 
       - name: cell_center_wkt_4326
         tests:
           - not_null
           - wkt_not_empty:
               column_name: cell_center_wkt_4326
-              config: {name: feat_h3_poi_points_r10__center_wkt_not_empty}
+              config: {name: feat_h3_poi_points_r7__center_wkt_not_empty}
           - wkt_prefix_any:
               column_name: cell_center_wkt_4326
               prefixes: ["POINT"]
-              config: {name: feat_h3_poi_points_r10__center_wkt_prefix_point}
+              config: {name: feat_h3_poi_points_r7__center_wkt_prefix_point}
 
       - name: poi_points_cnt
         tests:
           - not_null
           - non_negative:
               column_name: poi_points_cnt
-              config: {name: feat_h3_poi_points_r10__poi_points_cnt_non_negative}
+              config: {name: feat_h3_poi_points_r7__poi_points_cnt_non_negative}
 
       - name: parking_cnt
         tests:
           - non_negative:
               column_name: parking_cnt
-              config: {name: feat_h3_poi_points_r10__parking_cnt_non_negative}
+              config: {name: feat_h3_poi_points_r7__parking_cnt_non_negative}
 
       - name: mobility_services_cnt
         tests:
           - non_negative:
               column_name: mobility_services_cnt
-              config: {name: feat_h3_poi_points_r10__mobility_cnt_non_negative}
+              config: {name: feat_h3_poi_points_r7__mobility_cnt_non_negative}
 
       - name: poi_points_per_km2
         tests:
           - non_negative:
               column_name: poi_points_per_km2
-              config: {name: feat_h3_poi_points_r10__poi_points_per_km2_non_negative}
+              config: {name: feat_h3_poi_points_r7__poi_points_per_km2_non_negative}
 
       - name: last_load_ts
         description: "Nullable for empty cells (dense grid)."
