@@ -2,17 +2,17 @@
     materialized='dynamic_table',
     target_lag='48 hours',
     snowflake_warehouse='COMPUTE_WH',
-    cluster_by=['region_code','h3_r10']
+    cluster_by=['region_code','h3_r7']
 ) }}
 
 with base as (
   select
     p.region_code::string as region_code,
     p.feature_id::string  as feature_id,
-    p.poi_class::string   as poi_class,
-    p.poi_type::string    as poi_type,
+    lower(p.poi_class::string) as poi_class,
+    lower(p.poi_type::string)  as poi_type,
     p.geog                as poi_geog,
-    {{ h3_r10_from_geog_centroid('p.geog') }}::string as h3_r10,
+    {{ h3_r7_from_geog_centroid('p.geog') }}::string as h3_r7,
     p.load_ts::timestamp_ntz as load_ts
   from {{ ref('poi_areas') }} p
   where p.geog is not null
@@ -25,14 +25,14 @@ with base as (
 cells as (
   select
     d.region_code::string as region_code,
-    d.h3_r10::string      as h3_r10,
+    d.h3_r7::string       as h3_r7,
     d.cell_geog           as cell_geog,
     d.cell_area_m2::float as cell_area_m2,
     d.cell_wkt_4326::string        as cell_wkt_4326,
     d.cell_center_wkt_4326::string as cell_center_wkt_4326
-  from {{ ref('dim_h3_r10_cells') }} d
+  from {{ ref('dim_h3_r7_cells') }} d
   where d.region_code is not null and trim(d.region_code) <> ''
-    and d.h3_r10 is not null
+    and d.h3_r7 is not null
     and d.cell_geog is not null
     and d.cell_area_m2 is not null
     and d.cell_area_m2 > 0
@@ -41,7 +41,7 @@ cells as (
 joined as (
   select
     c.region_code,
-    c.h3_r10,
+    c.h3_r7,
     c.cell_area_m2,
     c.cell_wkt_4326,
     c.cell_center_wkt_4326,
@@ -54,18 +54,18 @@ joined as (
   from base b
   join cells c
     on c.region_code = b.region_code
-   and c.h3_r10      = b.h3_r10
+   and c.h3_r7       = b.h3_r7
   where st_intersects(b.poi_geog, c.cell_geog)
 ),
 
 x as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
     feature_id,
     poi_class,
     poi_type,
-    st_area(st_intersection(poi_geog, cell_geog))::float as poi_xarea_m2,
+    {{ area_m2('st_intersection(poi_geog, cell_geog)') }}::float as poi_xarea_m2,
     load_ts,
     cell_area_m2,
     cell_wkt_4326,
@@ -77,7 +77,7 @@ x as (
 agg as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
 
     any_value(cell_area_m2)         as cell_area_m2,
     any_value(cell_wkt_4326)        as cell_wkt_4326,

@@ -3,99 +3,139 @@ version: 2
 models:
   - name: activity_places
     description: >
-      Cleaned and deduplicated OSM activity/building polygons (from BRONZE.BUILDINGS_ACTIVITY).
-      One row per OSM feature (node/way) with normalized activity_class and activity_type_lc.
-      Geometry is stored as GEOGRAPHY (geog) plus a debug WKT column (geom_wkt_4326).
-      Grain: 1 row per feature_id (latest by load_ts, then source_file).
-      
-
-    config:
-      materialized: dynamic_table
+      Canonical, cleaned and deduplicated OSM activity/building geometries from BRONZE.BUILDINGS_ACTIVITY.
+      No whitelist/blacklist filtering here. Downstream feature marts (H3 R7/R10)
+      will do domain filtering and join to H3 dims.
+      Grain: (region_code, region, feature_id) latest by load_ts then source_file.
 
     tests:
-      - rowcount_gt_0
-      - osm_id_or_way_id_present
+      - rowcount_gt_0:
+          config:
+            name: activity_places__rowcount_gt_0
 
-      # WKT must look like a valid WKT
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, region, feature_id]
+          config:
+            name: activity_places__uk_region_region_feature
+
+      - osm_id_or_way_id_present:
+          config:
+            name: activity_places__osm_id_or_way_id_present
+
       - dbt_utils.expression_is_true:
-          name: activity_places__wkt_has_geometry_prefix
+          expression: "region_code is not null and trim(region_code) <> ''"
+          config:
+            name: activity_places__region_code_not_empty
+
+      - dbt_utils.expression_is_true:
+          expression: "region is not null and trim(region) <> ''"
+          config:
+            name: activity_places__region_not_empty
+
+      - dbt_utils.expression_is_true:
+          expression: "(geom_wkt_4326 is null) or (geog is not null)"
+          config:
+            name: activity_places__geog_present_when_wkt_present
+
+      - dbt_utils.expression_is_true:
           expression: >
             geom_wkt_4326 ilike 'POLYGON(%'
             or geom_wkt_4326 ilike 'MULTIPOLYGON(%'
             or geom_wkt_4326 ilike 'POINT(%'
             or geom_wkt_4326 ilike 'LINESTRING(%'
-
-      # ensure geog exists whenever WKT exists
-      - dbt_utils.expression_is_true:
-          name: activity_places__geog_present_when_wkt_present
-          expression: >
-            (geom_wkt_4326 is null) or (geog is not null)
-
-      # region_code sanity
-      - dbt_utils.expression_is_true:
-          name: activity_places__region_code_not_empty
-          expression: "region_code is not null and trim(region_code) <> ''"
+          config:
+            name: activity_places__wkt_has_geometry_prefix
 
     columns:
       - name: feature_id
-        description: >
-          Stable feature identifier derived from OSM ids: 'N' || osm_id or 'W' || osm_way_id.
-          This is the deduplication key in SILVER.
+        description: "Stable feature id: 'N' || osm_id or 'W' || osm_way_id."
         tests:
           - not_null
-          - unique
 
       - name: osm_id
-        description: "OSM node id (if the feature originates from node). Nullable if it's a way."
+        description: "OSM node id if originating from node; nullable otherwise."
+
       - name: osm_way_id
-        description: "OSM way id (if the feature originates from a way). Nullable if it's a node."
+        description: "OSM way id if originating from way; nullable otherwise."
 
       - name: name
-        description: "OSM name tag. Empty strings normalized to NULL."
+        description: "OSM name tag (empty -> NULL)."
 
       - name: name_en
-        description: "OSM name:en extracted from other_tags JSON (if present)."
+        description: "OSM name:en from tags JSON (if present)."
 
       - name: activity_class
-        description: >
-          High-level bucket derived from OSM tags (amenity/shop/office/tourism/leisure/sport/craft/building).
-          Used for feature engineering.
+        description: "High-level bucket: amenity/shop/office/tourism/leisure/sport/craft/building."
         tests:
           - not_null
-          - accepted_values:
+          - values_in_or_null:
+              column_name: activity_class
               values: ['amenity','shop','office','tourism','leisure','sport','craft','building']
+              config:
+                name: activity_places__activity_class_allowed
 
       - name: activity_type_lc
-        description: >
-          Normalized activity type (lowercased) from the first non-null of amenity/shop/office/tourism/leisure/sport/craft/building.
-          This is the main downstream category field.
+        description: "Lowercased activity type from the first non-null relevant tag."
         tests:
           - not_null
 
+      - name: building_type
+        description: "Lowercased building tag value (if present)."
+
+      - name: building_levels
+        description: "Parsed building:levels (default 1 if missing)."
+        tests:
+          - not_null
+          - non_negative:
+              column_name: building_levels
+              config:
+                name: activity_places__building_levels_non_negative
+
+      - name: operator_name
+        description: "Coalesced operator/network/brand if present."
+
+      - name: opening_hours
+        description: "Opening hours tag if present."
+
       - name: geog
-        description: "Snowflake GEOGRAPHY representation of geometry. Built from BRONZE geom_wkt."
+        description: "Snowflake GEOGRAPHY parsed from raw WKT."
         tests:
           - not_null
 
       - name: geom_wkt_4326
-        description: >
-          Debug WKT (EPSG:4326) derived from geog via ST_ASWKT. Mandatory debug column for geo QA.
+        description: "Debug WKT derived from GEOGRAPHY (EPSG:4326)."
         tests:
           - not_null
-          # WKT validation
-          - wkt_not_empty
+          - wkt_not_empty:
+              column_name: geom_wkt_4326
+              config:
+                name: activity_places__wkt_not_empty
+
+      - name: centroid_geog
+        description: "Centroid point of the feature GEOGRAPHY."
 
       - name: region_code
-        description: "Ingest region identifier (e.g. 'poland', 'germany'). Used for partitioning / clustering."
+        description: "Country/region code (lowercased)."
+        tests:
+          - not_null
+
+      - name: region
+        description: "Region string (e.g., voivodeship/state)."
         tests:
           - not_null
 
       - name: source_file
-        description: "Raw source file name / path used for lineage and tie-breaking in dedup."
+        description: "Source file path for lineage."
         tests:
           - not_null
 
       - name: load_ts
-        description: "Ingest/load timestamp (NTZ). Used for dedup ordering."
+        description: "Load timestamp used for dedup ordering."
         tests:
           - not_null
+
+      - name: tags
+        description: "Parsed tags JSON (from other_tags)."
+
+      - name: other_tags_raw
+        description: "Raw other_tags string."

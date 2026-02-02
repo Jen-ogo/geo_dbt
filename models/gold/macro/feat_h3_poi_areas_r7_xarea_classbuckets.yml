@@ -1,0 +1,152 @@
+version: 2
+
+models:
+  - name: feat_h3_poi_areas_r7_xarea_classbuckets
+    description: >
+      H3 R7 POI areas feature mart (sparse) using centroid assignment + intersection-area (XAREA).
+      Source: SILVER.POI_AREAS + SILVER.DIM_H3_R7_CELLS.
+      Grain: (region_code, h3_r7) — covered cells only.
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__rowcount_gt_0}
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r7]
+          config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__uk_region_h3}
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "poi_xarea_share is null or poi_xarea_share <= 5"
+          config:
+            name: feat_h3_poi_areas_r7_xarea_classbuckets__poi_xarea_share_le_5
+            severity: warn
+            warn_if: "> 0"
+            error_if: ">= 1000"
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "has_poi_areas = true"
+          config:
+            name: feat_h3_poi_areas_r7_xarea_classbuckets__has_poi_areas_true
+            severity: error
+            warn_if: "> 0"
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__h3_is_hex}
+
+      - name: cell_area_m2
+        tests:
+          - not_null
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__cell_area_non_negative}
+
+      - name: cell_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: {column_name: cell_wkt_4326}
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__cell_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_wkt_4326
+                prefixes: ["POLYGON","MULTIPOLYGON"]
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__cell_wkt_prefix_polygon}
+
+      - name: cell_center_wkt_4326
+        tests:
+          - not_null
+          - wkt_not_empty:
+              arguments: {column_name: cell_center_wkt_4326}
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__center_wkt_not_empty}
+          - wkt_prefix_any:
+              arguments:
+                column_name: cell_center_wkt_4326
+                prefixes: ["POINT"]
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__center_wkt_prefix_point}
+
+      - name: has_poi_areas
+        tests: [not_null]
+
+      - name: poi_areas_cnt
+        tests:
+          - not_null
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__poi_areas_cnt_non_negative}
+
+      - name: poi_xarea_m2_sum
+        tests:
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__poi_xarea_sum_non_negative}
+
+      - name: poi_xarea_share
+        tests:
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets__poi_xarea_share_non_negative}
+
+      - name: poi_amenity_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas_r7__amenity_cnt_non_negative}}}]
+      - name: poi_shop_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas_r7__shop_cnt_non_negative}}}]
+      - name: poi_tourism_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas_r7__tourism_cnt_non_negative}}}]
+      - name: poi_office_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas_r7__office_cnt_non_negative}}}]
+      - name: poi_leisure_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas_r7__leisure_cnt_non_negative}}}]
+      - name: poi_sport_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas_r7__sport_cnt_non_negative}}}]
+      - name: poi_building_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas_r7__building_cnt_non_negative}}}]
+      - name: poi_landuse_cnt
+        tests: [{non_negative: {config: {name: feat_h3_poi_areas_r7__landuse_cnt_non_negative}}}]
+
+      - name: last_load_ts
+        tests: [not_null]
+
+  - name: feat_h3_poi_areas_r7_xarea_classbuckets_dense
+    description: >
+      Dense ML-ready version (all H3 r7 cells). Left-joins sparse features and fills zeros.
+      last_load_ts is NULL for empty cells; has_poi_areas = FALSE in that case.
+      Grain: (region_code, h3_r7).
+
+    tests:
+      - rowcount_gt_0:
+          config: {name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__rowcount_gt_0}
+
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [region_code, h3_r7]
+          config: {name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__uk_region_h3}
+
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(has_poi_areas = false and last_load_ts is null) or (has_poi_areas = true and last_load_ts is not null)"
+          config:
+            name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__coverage_last_load_ts_consistency
+            severity: error
+            warn_if: "> 0"
+
+    columns:
+      - name: region_code
+        tests: [not_null]
+      - name: h3_r7
+        tests:
+          - not_null
+          - is_h3_hex:
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__h3_is_hex}
+      - name: has_poi_areas
+        tests: [not_null]
+      - name: poi_areas_cnt
+        tests:
+          - not_null
+          - non_negative:
+              config: {name: feat_h3_poi_areas_r7_xarea_classbuckets_dense__cnt_non_negative}
+      - name: last_load_ts
+        description: "Nullable for empty cells (dense grid)."

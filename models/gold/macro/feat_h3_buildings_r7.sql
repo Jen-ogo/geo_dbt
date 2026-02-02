@@ -2,7 +2,7 @@
     materialized='dynamic_table',
     target_lag='48 hours',
     snowflake_warehouse='COMPUTE_WH',
-    cluster_by=['region_code','h3_r10']
+    cluster_by=['region_code','h3_r7']
 ) }}
 
 with ap as (
@@ -42,7 +42,7 @@ ap_model as (
 enriched as (
   select
     region_code,
-    {{ h3_r10_from_geog_point('centroid_geog') }} as h3_r10,
+    {{ h3_r7_from_geog_point('centroid_geog') }} as h3_r7,
     building_type_lc,
     building_levels,
     st_area(geog) as footprint_area_m2,
@@ -53,7 +53,7 @@ enriched as (
 classified as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
     building_levels,
     footprint_area_m2,
     case
@@ -71,7 +71,7 @@ classified as (
     end as building_group,
     load_ts
   from enriched
-  where h3_r10 is not null
+  where h3_r7 is not null
     and footprint_area_m2 is not null
     and footprint_area_m2 > 0
 ),
@@ -79,7 +79,7 @@ classified as (
 agg as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
 
     count(*) as buildings_cnt,
     count_if(building_group = 'residential')    as res_buildings_cnt,
@@ -102,16 +102,16 @@ agg as (
 cell as (
   select
     region_code,
-    h3_r10,
+    h3_r7,
     cell_area_m2,
     cell_wkt_4326,
     cell_center_wkt_4326
-  from {{ ref('dim_h3_r10_cells') }}
+  from {{ ref('dim_h3_r7_cells') }}
 )
 
 select
   c.region_code,
-  c.h3_r10,
+  c.h3_r7,
 
   c.cell_area_m2,
   c.cell_wkt_4326,
@@ -140,4 +140,4 @@ select
 from agg a
 join cell c
   on c.region_code = a.region_code
- and c.h3_r10      = a.h3_r10
+ and c.h3_r7      = a.h3_r7
