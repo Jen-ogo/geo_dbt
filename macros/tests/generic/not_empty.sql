@@ -1,4 +1,6 @@
 {% test not_empty(model) %}
-select 1
+
+select 1 as failure
 where (select count(*) from {{ model }}) = 0
+
 {% endtest %}
