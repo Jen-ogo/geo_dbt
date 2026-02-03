@@ -8,7 +8,7 @@
 with tp as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     h3_point_to_cell_string(geog, 10)::string as h3_r10,
     load_ts::timestamp_ntz as load_ts
   from {{ ref('transit_points') }}
@@ -19,7 +19,7 @@ with tp as (
 tl as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     h3_point_to_cell_string(st_centroid(geog), 10)::string as h3_r10,
     st_length(geog)::float as len_m,
     load_ts::timestamp_ntz as load_ts
@@ -31,6 +31,7 @@ tl as (
 agg_points as (
   select
     region_code,
+--    region,
     h3_r10,
     iff(count(distinct region)=1, max(region), null) as region,
     count(*)::number(18,0) as transit_points_cnt,
@@ -43,6 +44,7 @@ agg_points as (
 agg_lines as (
   select
     region_code,
+--   region,
     h3_r10,
     iff(count(distinct region)=1, max(region), null) as region,
     sum(len_m)::float as transit_lines_len_m_sum,
@@ -55,6 +57,7 @@ agg_lines as (
 cells as (
   select
     region_code::string as region_code,
+    region::string as region,
     h3_r10::string      as h3_r10,
     cell_area_m2,
     cell_wkt_4326,
@@ -95,7 +98,7 @@ select
 from cells c
 left join agg_points p
   on p.region_code = c.region_code
- and p.h3_r10      = c.h3_r10
+ and p.h3_r10       = c.h3_r10
 left join agg_lines l
   on l.region_code = c.region_code
- and l.h3_r10      = c.h3_r10
+ and l.h3_r10       = c.h3_r10

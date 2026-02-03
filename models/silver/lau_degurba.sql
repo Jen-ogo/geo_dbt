@@ -58,7 +58,7 @@ geo as (
 admin4 as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     geog                as admin_geog
   from {{ ref('admin_areas') }}
   where admin_level = 4

@@ -8,6 +8,7 @@
 with ap as (
   select
     region_code::string as region_code,
+    region::string as region,
     feature_id::string  as feature_id,
     lower(coalesce(building_type::string, activity_type_lc::string)) as building_type_lc,
     greatest(coalesce(building_levels::int, 1), 1) as building_levels,
@@ -42,6 +43,7 @@ ap_model as (
 enriched as (
   select
     region_code,
+    region,
     {{ h3_r7_from_geog_point('centroid_geog') }} as h3_r7,
     building_type_lc,
     building_levels,
@@ -53,6 +55,7 @@ enriched as (
 classified as (
   select
     region_code,
+    region,
     h3_r7,
     building_levels,
     footprint_area_m2,
@@ -79,6 +82,7 @@ classified as (
 agg as (
   select
     region_code,
+    region,
     h3_r7,
 
     count(*) as buildings_cnt,
@@ -96,12 +100,13 @@ agg as (
 
     max(load_ts) as last_load_ts
   from classified
-  group by 1,2
+  group by 1,2,3
 ),
 
 cell as (
   select
     region_code,
+    region,
     h3_r7,
     cell_area_m2,
     cell_wkt_4326,
@@ -111,6 +116,7 @@ cell as (
 
 select
   c.region_code,
+  c.region,
   c.h3_r7,
 
   c.cell_area_m2,
@@ -140,4 +146,5 @@ select
 from agg a
 join cell c
   on c.region_code = a.region_code
+ and c.region = a.region
  and c.h3_r7      = a.h3_r7

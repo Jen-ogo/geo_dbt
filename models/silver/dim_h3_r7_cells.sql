@@ -5,6 +5,7 @@ with all_h3 as (
   -- EV chargers (points)
   select
     region_code,
+    region,
     h3_point_to_cell_string({{ wkt_to_geog('geom_wkt_4326') }}, 7) as h3_r7
   from {{ ref('ev_chargers') }}
   where geom_wkt_4326 is not null
@@ -13,6 +14,7 @@ with all_h3 as (
   -- road segments (lines) -> centroid
   select
     region_code,
+    region,
     h3_point_to_cell_string(st_centroid({{ wkt_to_geog('geom_wkt_4326') }}), 7) as h3_r7
   from {{ ref('road_segments') }}
   where geom_wkt_4326 is not null
@@ -21,6 +23,7 @@ with all_h3 as (
   -- POI points
   select
     region_code,
+    region,
     h3_point_to_cell_string({{ wkt_to_geog('geom_wkt_4326') }}, 7) as h3_r7
   from {{ ref('poi_points') }}
   where geom_wkt_4326 is not null
@@ -29,6 +32,7 @@ with all_h3 as (
   -- POI areas (polygons) -> centroid
   select
     region_code,
+    region,
     h3_point_to_cell_string(st_centroid({{ wkt_to_geog('geom_wkt_4326') }}), 7) as h3_r7
   from {{ ref('poi_areas') }}
   where geom_wkt_4326 is not null
@@ -37,6 +41,7 @@ with all_h3 as (
   -- transit points
   select
     region_code,
+    region,
     h3_point_to_cell_string({{ wkt_to_geog('geom_wkt_4326') }}, 7) as h3_r7
   from {{ ref('transit_points') }}
   where geom_wkt_4326 is not null
@@ -45,6 +50,7 @@ with all_h3 as (
   -- transit lines -> centroid
   select
     region_code,
+    region,
     h3_point_to_cell_string(st_centroid({{ wkt_to_geog('geom_wkt_4326') }}), 7) as h3_r7
   from {{ ref('transit_lines') }}
   where geom_wkt_4326 is not null
@@ -53,6 +59,7 @@ with all_h3 as (
   -- activity places (polygons) -> centroid
   select
     region_code,
+    region,
     h3_point_to_cell_string(st_centroid({{ wkt_to_geog('geom_wkt_4326') }}), 7) as h3_r7
   from {{ ref('activity_places') }}
   where geom_wkt_4326 is not null
@@ -60,15 +67,18 @@ with all_h3 as (
 
 distinct_h3 as (
   select distinct
-    region_code::string as region_code,
+    region_code as region_code,
+    region as region,
     h3_r7::string       as h3_r7
   from all_h3
   where region_code is not null
+    and region is not null
     and h3_r7 is not null
 )
 
 select
   region_code,
+  region,
   h3_r7,
 
   h3_cell_to_boundary(h3_r7)                      as cell_geog,

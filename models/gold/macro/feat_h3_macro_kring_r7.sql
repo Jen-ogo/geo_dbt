@@ -3,7 +3,7 @@
 with base as (
   select
     cast(c.region_code as string) as region_code,
-    cast(c.region_code      as string) as region,
+    cast(c.region      as string) as region,
     cast(c.h3_r7       as string) as h3_r7,
     cast(c.cell_area_m2 as double)         as cell_area_m2,
     cast(c.cell_wkt_4326 as string)        as cell_wkt_4326,
@@ -17,17 +17,19 @@ with base as (
 deg0 as (
   select
     cast(region_code as string) as region_code,
+    cast(region as string) as region,
     cast(h3_r7 as string)       as h3_r7,
     try_cast(year as int)       as year,
     try_cast(degurba as int)    as degurba,
     cast(last_load_ts as timestamp) as last_load_ts
   from {{ ref('feat_h3_degurba_r7') }}
   where region_code is not null
+    and region is not null
     and h3_r7 is not null
 ),
 
 deg as (
-  select region_code, h3_r7, year, degurba, last_load_ts
+  select region_code, region, h3_r7, year, degurba, last_load_ts
   from (
     select
       d.*,
@@ -55,6 +57,7 @@ centers as (
   from base b
   left join deg d
     on d.region_code = b.region_code
+    and d.region = b.region
    and d.h3_r7      = b.h3_r7
 ),
 
@@ -105,12 +108,12 @@ nb as (
   from kring k
   join {{ ref('dim_h3_r7_cells') }} d
     on d.region_code = k.region_code
---   and d.region      = k.region
+   and d.region      = k.region
    and d.h3_r7       = k.h3_neighbor
 
   left join {{ ref('feat_h3_pop_r7') }} pop
     on pop.region_code = k.region_code
---   and pop.region      = k.region
+   and pop.region      = k.region
    and pop.h3_r7       = k.h3_neighbor
 
   left join {{ ref('feat_h3_charging_r7') }} ch
@@ -125,12 +128,12 @@ nb as (
 
   left join {{ ref('feat_h3_buildings_r7') }} bld
     on bld.region_code = k.region_code
---   and bld.region      = k.region
+   and bld.region      = k.region
    and bld.h3_r7       = k.h3_neighbor
 
   left join {{ ref('feat_h3_roads_r7') }} roads
     on roads.region_code = k.region_code
---   and roads.region      = k.region
+   and roads.region      = k.region
    and roads.h3_r7       = k.h3_neighbor
 
   left join {{ ref('feat_h3_transit_point_lines_r7') }} tr

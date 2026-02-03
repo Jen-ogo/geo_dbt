@@ -9,7 +9,7 @@
 with pop as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     h3_r7::string       as h3_r7,
 
     cell_area_m2::float as cell_area_m2,
@@ -20,12 +20,14 @@ with pop as (
     last_load_ts::timestamp_ntz as pop_last_load_ts
   from {{ ref('feat_h3_pop_r7') }}
   where region_code is not null
+    and region is not null
     and h3_r7       is not null
 ),
 
 ch_src as (
   select
     region_code::string as region_code,
+    region::string      as region,
 
     /* canonical R7: use centroid macro on charger GEOG */
     {{ h3_r7_from_geog_centroid("coalesce(geog, try_to_geography(geom_wkt_4326))") }}::string as h3_r7,
@@ -42,6 +44,7 @@ ch_src as (
 ch_agg as (
   select
     region_code,
+    region,
     h3_r7,
 
     count(*) as chargers_cnt,
@@ -52,7 +55,7 @@ ch_agg as (
     max(load_ts) as chargers_last_load_ts
   from ch_src
   where h3_r7 is not null
-  group by 1,2
+  group by 1,2,3
 )
 
 select
@@ -91,4 +94,5 @@ select
 from pop p
 left join ch_agg c
   on c.region_code = p.region_code
+and c.region = p.region
  and c.h3_r7       = p.h3_r7

@@ -8,6 +8,7 @@
 with base as (
   select
     p.region_code::string as region_code,
+    p.region::string as region,
     p.feature_id::string  as feature_id,
     p.poi_class::string   as poi_class,
     p.poi_type::string    as poi_type,
@@ -17,6 +18,7 @@ with base as (
   from {{ ref('poi_areas') }} p
   where p.geog is not null
     and p.region_code is not null and trim(p.region_code) <> ''
+    and p.region is not null and trim(p.region) <> ''
     and p.feature_id is not null
     and p.poi_class is not null
     and p.poi_type  is not null
@@ -25,6 +27,7 @@ with base as (
 cells as (
   select
     d.region_code::string as region_code,
+    d.region::string as region,
     d.h3_r10::string      as h3_r10,
     d.cell_geog           as cell_geog,
     d.cell_area_m2::float as cell_area_m2,
@@ -32,6 +35,7 @@ cells as (
     d.cell_center_wkt_4326::string as cell_center_wkt_4326
   from {{ ref('dim_h3_r10_cells') }} d
   where d.region_code is not null and trim(d.region_code) <> ''
+    and d.region is not null and trim(d.region) <> ''
     and d.h3_r10 is not null
     and d.cell_geog is not null
     and d.cell_area_m2 is not null
@@ -41,6 +45,7 @@ cells as (
 joined as (
   select
     c.region_code,
+    c.region,
     c.h3_r10,
     c.cell_area_m2,
     c.cell_wkt_4326,
@@ -54,6 +59,7 @@ joined as (
   from base b
   join cells c
     on c.region_code = b.region_code
+   and c.region = b.region
    and c.h3_r10      = b.h3_r10
   where st_intersects(b.poi_geog, c.cell_geog)
 ),
@@ -61,6 +67,7 @@ joined as (
 x as (
   select
     region_code,
+    region,
     h3_r10,
     feature_id,
     poi_class,
@@ -77,6 +84,7 @@ x as (
 agg as (
   select
     region_code,
+    region,
     h3_r10,
 
     any_value(cell_area_m2)         as cell_area_m2,
@@ -116,7 +124,7 @@ agg as (
     max(load_ts) as last_load_ts
   from x
   where poi_xarea_m2 is not null and poi_xarea_m2 > 0
-  group by 1,2
+  group by 1,2,3
 )
 
 select * from agg

@@ -37,14 +37,14 @@ with src as (
 dim as (
   select
     cast(region_code as string) as region_code,
-    cast(region_code      as string) as region,
+    cast(region      as string) as region,
     cast(h3_r7       as string) as h3_r7,
     cast(cell_area_m2 as double)         as cell_area_m2,
     cast(cell_wkt_4326 as string)        as cell_wkt_4326,
     cast(cell_center_wkt_4326 as string) as cell_center_wkt_4326
   from {{ ref('dim_h3_r7_cells') }}
   where region_code is not null 
-    --and region is not null 
+    and region is not null 
     and h3_r7 is not null
 ),
 
@@ -108,7 +108,6 @@ score as (
     degurba,
     k,
 
-    -- FIX: правильное имя
     center_cell_area_m2 as cell_area_m2,
     cell_wkt_4326,
     cell_center_wkt_4326,
@@ -131,7 +130,6 @@ score as (
     transit_points_cnt_kring,
     transit_lines_len_m_sum_kring,
 
-    -- ranks (нужны для дебага/анализа, и чтобы не было UNRESOLVED)
     pr_pop,
     pr_emp,
     pr_bld_dens,
@@ -142,7 +140,7 @@ score as (
     pr_ch_km2,
     pr_ch_10k,
 
-    -- demand
+
     (
       {{ var('w_pop', 0.30) }} * pr_pop +
       {{ var('w_emp', 0.15) }} * pr_emp +
@@ -153,7 +151,7 @@ score as (
       {{ var('w_roads', 0.15) }} * pr_roads
     ) as demand_score,
 
-    -- supply (gating: если pop<min -> убираем компоненту per10k)
+
     case
       when chargers_per_10k_pop_kring_gated is null then
         ({{ var('w_supply_km2', 0.70) }} * pr_ch_km2)

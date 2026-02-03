@@ -8,14 +8,14 @@
 with admin4 as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     osm_id::string      as admin_osm_id,
     name::string        as admin_name,
     geog                as admin_geog
   from {{ ref('admin_areas') }}
   where admin_level = 4
     and geog is not null
-    -- TODO: tighten to administrative boundaries only (e.g. boundary='administrative') once confirmed in admin_areas schema
+    and boundary = 'administrative'
 ),
 
 nuts2 as (
@@ -36,7 +36,7 @@ nuts2 as (
 /* project scope: NUTS2 whose centroid is within admin4 polygon for each region_code/region */
 project_nuts2_scope as (
   select distinct
-    a.region_code,
+     a.region_code,
     a.region,
     a.admin_osm_id,
     a.admin_name,
@@ -52,6 +52,7 @@ project_nuts2_scope as (
 cells as (
   select
     region_code::string as region_code,
+    region::string as region,
     h3_r10::string      as h3_r10,
     cell_area_m2,
     cell_wkt_4326,
@@ -59,6 +60,7 @@ cells as (
     h3_cell_to_point(h3_r10) as cell_center_geog
   from {{ ref('dim_h3_r10_cells') }}
   where region_code is not null
+    and region is not null
     and h3_r10 is not null
     and cell_center_wkt_4326 is not null
 ),
@@ -67,7 +69,6 @@ cells as (
 h3_to_nuts2 as (
   select
     c.region_code,
-    /* region is derived from scope (DIM has no region yet) */
     s.region,
     c.h3_r10,
 
@@ -85,6 +86,7 @@ h3_to_nuts2 as (
   from cells c
   join project_nuts2_scope s
     on s.region_code = c.region_code
+    and s.region = c.region
   join nuts2 n
     on n.cntr_code = s.cntr_code
    and n.nuts_id   = s.nuts_id
