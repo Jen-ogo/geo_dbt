@@ -8,7 +8,7 @@
 with admin4 as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     osm_id::string      as admin_osm_id,
     name::string        as admin_name,
     geog                as admin_geog
@@ -51,6 +51,7 @@ project_nuts2_scope as (
 cells as (
   select
     region_code::string as region_code,
+    region::string as region,
     h3_r7::string       as h3_r7,
     cell_area_m2,
     cell_wkt_4326,
@@ -58,6 +59,7 @@ cells as (
     h3_cell_to_point(h3_r7) as cell_center_geog
   from {{ ref('dim_h3_r7_cells') }}
   where region_code is not null
+    and region is not null
     and h3_r7 is not null
     and cell_center_wkt_4326 is not null
 ),
@@ -82,6 +84,7 @@ h3_to_nuts2 as (
   from cells c
   join project_nuts2_scope s
     on s.region_code = c.region_code
+    and s.region = c.region
   join nuts2 n
     on n.cntr_code = s.cntr_code
    and n.nuts_id   = s.nuts_id

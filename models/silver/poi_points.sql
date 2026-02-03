@@ -19,8 +19,8 @@ typed as (
     nullif(name,'')::string as name,
 
     -- IMPORTANT: keep region from BRONZE (fixes downstream compilation expecting `region`)
-    region::string as region,
-    lower(region::string) as region_code,
+    lower(country::string) as region_code,
+    nullif(trim(region::string),'') as region,
 
     tags:"addr:housenumber"::string as addr_housenumber,
     tags:"addr:street"::string      as addr_street,

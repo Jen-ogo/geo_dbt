@@ -59,14 +59,14 @@ agg as (
 cells as (
   select
     region_code::string as region_code,
-    --region::string      as region,
+    region::string      as region,
     h3_r10::string      as h3_r10,
     cell_area_m2,
     cell_wkt_4326,
     cell_center_wkt_4326
   from {{ ref('dim_h3_r10_cells') }}
   where region_code is not null
---   and region is not null
+   and region is not null
     and h3_r10 is not null
 )
 
@@ -114,5 +114,5 @@ select
 from cells c
 left join agg a
   on a.region_code = c.region_code
--- and a.region      = c.region
+and a.region      = c.region
  and a.h3_r10      = c.h3_r10

@@ -7,6 +7,7 @@
 
 select
   d.region_code,
+  d.region,
   d.h3_r10,
   d.cell_area_m2,
   d.cell_wkt_4326,
@@ -43,4 +44,5 @@ select
 from {{ ref('dim_h3_r10_cells') }} d
 left join {{ ref('feat_h3_poi_areas_r10_xarea_classbuckets') }} s
   on s.region_code = d.region_code
+ and s.region = d.region
  and s.h3_r10      = d.h3_r10

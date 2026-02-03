@@ -8,7 +8,7 @@
 with tp as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     h3_point_to_cell_string(geog, 7)::string as h3_r7,
     load_ts::timestamp_ntz as load_ts
   from {{ ref('transit_points') }}
@@ -19,7 +19,7 @@ with tp as (
 tl as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     h3_point_to_cell_string(st_centroid(geog), 7)::string as h3_r7,
     /* Snowflake GEOGRAPHY length is in meters (geodesic) */
     st_length(geog)::float as len_m,
@@ -32,6 +32,7 @@ tl as (
 agg_points as (
   select
     region_code,
+--    region,
     h3_r7,
     iff(count(distinct region)=1, max(region), null) as region,
     count(*)::number(18,0) as transit_points_cnt,
@@ -44,6 +45,7 @@ agg_points as (
 agg_lines as (
   select
     region_code,
+--    region,
     h3_r7,
     iff(count(distinct region)=1, max(region), null) as region,
     sum(len_m)::float as transit_lines_len_m_sum,
@@ -56,6 +58,7 @@ agg_lines as (
 cells as (
   select
     region_code::string as region_code,
+    region::string as region,
     h3_r7::string       as h3_r7,
     cell_area_m2,
     cell_wkt_4326,
@@ -67,7 +70,7 @@ cells as (
 
 select
   c.region_code,
-
+ 
   case
     when p.region is null and l.region is null then null
     when p.region is not null and l.region is null then p.region

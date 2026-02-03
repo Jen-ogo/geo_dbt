@@ -8,6 +8,7 @@
 with r as (
   select
     region_code::string        as region_code,
+    region::string        as region,
     osm_id::string             as osm_id,
     highway::string            as highway,
     nullif(service::string,'') as service,
@@ -22,6 +23,7 @@ with r as (
   from {{ ref('road_segments') }}
   where geog is not null
     and region_code is not null
+    and region is not null
     and osm_id is not null
 ),
 
@@ -54,6 +56,7 @@ typed as (
 agg as (
   select
     region_code,
+    region,
     h3_r7,
 
     count(*)                                    as road_segments_cnt,
@@ -83,12 +86,13 @@ agg as (
 
     max(load_ts)                            as last_load_ts
   from typed
-  group by 1,2
+  group by 1,2,3
 ),
 
 dim as (
   select
     region_code::string as region_code,
+    region::string as region,
     h3_r7::string       as h3_r7,
     cell_area_m2,
     cell_wkt_4326,
@@ -102,6 +106,7 @@ dim as (
 
 select
   d.region_code,
+  d.region,
   d.h3_r7,
 
   d.cell_area_m2,
@@ -143,4 +148,5 @@ select
 from dim d
 left join agg a
   on a.region_code = d.region_code
+ and a.region = d.region
  and a.h3_r7       = d.h3_r7

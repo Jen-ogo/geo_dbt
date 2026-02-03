@@ -47,8 +47,8 @@ typed as (
     {{ wkt_to_geog('geom_wkt') }} as geog,
 
     /* no COUNTRY in this bronze: use region as region_code */
-    lower(region::string)               as region_code,
-    nullif(trim(region::string),'')     as region,
+    lower(country::string) as region_code,
+    nullif(trim(region::string),'') as region,
 
     source_file::string                 as source_file,
     load_ts::timestamp_ntz              as load_ts,

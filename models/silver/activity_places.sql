@@ -75,7 +75,7 @@ base as (
     end as centroid_geog,
 
     /* lineage */
-    lower(region::string) as region_code,
+    lower(country::string) as region_code,
     nullif(trim(region::string),'') as region,
 
     source_file::string as source_file,

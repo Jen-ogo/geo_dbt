@@ -9,7 +9,7 @@
 with pop as (
   select
     region_code::string as region_code,
-    region_code::string      as region,
+    region::string      as region,
     h3_r10::string      as h3_r10,
 
     cell_area_m2::float as cell_area_m2,
@@ -26,6 +26,7 @@ with pop as (
 ch_src as (
   select
     region_code::string as region_code,
+    region::string      as region,
 
     /* считаем h3_r10 прямо тут (как в Databricks) */
     {{ h3_r10_from_geog_point("coalesce(geog, try_to_geography(geom_wkt_4326))") }}::string as h3_r10,
@@ -42,6 +43,7 @@ ch_src as (
 ch_agg as (
   select
     region_code,
+    region,
     h3_r10,
 
     count(*) as chargers_cnt,
@@ -52,7 +54,7 @@ ch_agg as (
     max(load_ts) as chargers_last_load_ts
   from ch_src
   where h3_r10 is not null
-  group by 1,2
+  group by 1,2,3
 )
 
 select
@@ -91,4 +93,5 @@ select
 from pop p
 left join ch_agg c
   on c.region_code = p.region_code
+  and c.region = p.region
  and c.h3_r10      = p.h3_r10

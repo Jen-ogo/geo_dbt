@@ -46,6 +46,7 @@ candidates as (
 cand_with_cells as (
   select
     c.region_code,
+    d.region,
     c.admin4_osm_id,
     c.admin4_name,
     c.grid_id,
@@ -75,6 +76,7 @@ cand_with_cells as (
 weighted as (
   select
     region_code,
+    region,
     admin4_osm_id,
     admin4_name,
     grid_id,
@@ -98,6 +100,7 @@ weighted as (
 alloc as (
   select
     region_code,
+    region,
     admin4_osm_id,
     admin4_name,
     grid_id,
@@ -127,6 +130,7 @@ alloc as (
 agg as (
   select
     region_code,
+    region,
     h3_r7,
     admin4_osm_id,
     admin4_name,
@@ -157,11 +161,12 @@ agg as (
     count(distinct grid_id) as grid_cells_cnt,
     max(load_ts) as last_load_ts
   from alloc
-  group by 1,2,3,4
+  group by 1,2,3,4,5
 )
 
 select
   a.region_code,
+  a.region,
   a.h3_r7,
 
   d.cell_area_m2,
@@ -200,4 +205,5 @@ select
 from agg a
 join {{ ref('dim_h3_r7_cells') }} d
   on d.region_code = a.region_code
+ and d.region = a.region
  and d.h3_r7       = a.h3_r7
