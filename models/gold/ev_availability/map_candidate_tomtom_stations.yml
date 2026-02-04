@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: map_candidate_tomtom_stations
+    description: "Mapping of candidate points/areas to nearest/eligible TomTom EV stations."
+    tests:
+      - not_empty
+      - rowcount_gt_0
+
+    columns:
+      - name: TOMTOM_POI_ID
+        tests:
+          - not_null
