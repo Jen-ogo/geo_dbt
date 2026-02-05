@@ -1,0 +1,45 @@
+version: 2
+
+models:
+  - name: dim_tomtom_ev_stations
+    description: >
+      TomTom EV charging stations (dimension). One row per TomTom POI (TOMTOM_POI_ID).
+      Includes station identity/address, WGS84 coordinates, static connectors JSON string,
+      raw POI payload (VARIANT), and UPDATED_AT timestamp (UTC) for the enrichment run.
+    tests:
+      - rowcount_gt_0
+      - not_empty
+    columns:
+      - name: tomtom_poi_id
+        description: TomTom POI id (natural primary key).
+        tests:
+          - not_null
+          - unique
+
+      - name: charging_availability_id
+        description: TomTom chargingAvailability id used to query live availability (can be NULL for some POIs).
+
+      - name: lat
+        description: Latitude in WGS84.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between -90 and 90"
+
+      - name: lon
+        description: Longitude in WGS84.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between -180 and 180"
+
+      - name: connectors_static_json
+        description: Static connector metadata serialized as JSON string.
+
+      - name: raw_poi_json
+        description: Raw POI JSON payload (Snowflake VARIANT) for audit/debug.
+
+      - name: updated_at
+        description: Ingestion timestamp (TIMESTAMP_NTZ, UTC).
+        tests:
+          - not_null
