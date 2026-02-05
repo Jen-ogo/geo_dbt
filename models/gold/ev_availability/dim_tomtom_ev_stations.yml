@@ -2,69 +2,44 @@ version: 2
 
 models:
   - name: dim_tomtom_ev_stations
-    description: "TomTom EV charging stations dimension (GOLD). Raw POI payload + parsed address + coordinates. NOTE: UPDATED_AT has known parsing issues in Snowflake for some API values."
-
+    description: >
+      TomTom EV charging stations (dimension). One row per TomTom POI (TOMTOM_POI_ID).
+      Includes station identity/address, WGS84 coordinates, static connectors JSON string,
+      raw POI payload (VARIANT), and UPDATED_AT timestamp (UTC) for the enrichment run.
     tests:
       - rowcount_gt_0
       - not_empty
-
     columns:
-      - name: TOMTOM_POI_ID
-        description: "TomTom POI identifier."
+      - name: tomtom_poi_id
+        description: TomTom POI id (natural primary key).
         tests:
           - not_null
+          - unique
 
-      - name: CHARGING_AVAILABILITY_ID
-        description: "TomTom availability identifier (may be null depending on payload)."
+      - name: charging_availability_id
+        description: TomTom chargingAvailability id used to query live availability (can be NULL for some POIs).
 
-      - name: NAME
-        description: "Station name."
-
-      - name: BRAND
-        description: "Brand/operator."
-
-      - name: CATEGORY
-        description: "TomTom POI category."
-
-      - name: COUNTRY_CODE
-        description: "ISO country code."
-
-      - name: COUNTRY_SUBDIVISION
-        description: "Country subdivision / region."
-
-      - name: MUNICIPALITY
-        description: "Municipality/city."
-
-      - name: STREET
-        description: "Street name."
-
-      - name: STREET_NUMBER
-        description: "Street number."
-
-      - name: POSTAL_CODE
-        description: "Postal code."
-
-      - name: FREEFORM_ADDRESS
-        description: "Freeform address."
-
-      - name: LAT
-        description: "Latitude (WGS84)."
+      - name: lat
+        description: Latitude in WGS84.
         tests:
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between -90 and 90"
 
-      - name: LON
-        description: "Longitude (WGS84)."
+      - name: lon
+        description: Longitude in WGS84.
         tests:
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: "between -180 and 180"
 
-      - name: CONNECTORS_STATIC_JSON
-        description: "Connectors static JSON as string."
+      - name: connectors_static_json
+        description: Static connector metadata serialized as JSON string.
 
-      - name: RAW_POI_JSON
-        description: "Raw POI JSON payload (variant/json)."
+      - name: raw_poi_json
+        description: Raw POI JSON payload (Snowflake VARIANT) for audit/debug.
+
+      - name: updated_at
+        description: Ingestion timestamp (TIMESTAMP_NTZ, UTC).
         tests:
           - not_null
-
-      - name: UPDATED_AT
-        description: "Update timestamp from API/ingest. Known issue: Snowflake may fail to read some values; may be temporarily nulled/fixed later."
-        

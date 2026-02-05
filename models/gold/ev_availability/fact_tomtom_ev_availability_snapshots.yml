@@ -2,21 +2,36 @@ version: 2
 
 models:
   - name: fact_tomtom_ev_availability_snapshots
-    description: "Snapshots of EV availability by station/connector over time."
+    description: >
+      Charging availability snapshots from TomTom (fact).
+      Multiple rows per CHARGING_AVAILABILITY_ID per SNAPSHOT_TS and possibly per POWER_KW (perPowerLevel).
+      RAW_AVAIL_JSON is stored as VARIANT. Metric columns are non-negative counters.
     tests:
-      - not_empty
       - rowcount_gt_0
-
+      - not_empty
     columns:
-      - name: TOMTOM_POI_ID
-        tests:
-          - not_null
+      - name: charging_availability_id
+        tests: [not_null]
+      - name: snapshot_ts
+        tests: [not_null]
+      - name: connector_type
+        tests: [not_null]
 
-      - name: CHARGING_AVAILABILITY_ID
-        tests:
-          - not_null
+      - name: power_kw
+        tests: [non_negative]
 
-      - name: UPDATED_AT
-        tests:
-          - dbt_utils.expression_is_true:
-              xpression: "UPDATED_AT is null OR (try_to_timestamp_ntz(UPDATED_AT) is not null)"
+      - name: total
+        tests: [non_negative]
+      - name: available
+        tests: [non_negative]
+      - name: occupied
+        tests: [non_negative]
+      - name: reserved
+        tests: [non_negative]
+      - name: unknown
+        tests: [non_negative]
+      - name: out_of_service
+        tests: [non_negative]
+
+      - name: raw_avail_json
+        description: Raw availability payload (Snowflake VARIANT) for audit/debug.
