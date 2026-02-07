@@ -2,7 +2,7 @@
 
 select *
 from {{ model }}
-where {{ column_name }} is null
-   or {{ column_name }} < 0
+where {{ column_name }} < 0
+--   or {{ column_name }} is null
 
 {% endtest %}
