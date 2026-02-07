@@ -1,0 +1,83 @@
+version: 2
+
+models:
+  - name: candidate_roads_r7
+    description: >
+      DAG input dataset (macro, H3 R7). Selects top candidate H3 R7 cells by macro_score with degurba quota,
+      then picks major roads inside each candidate cell (candidate_area scope) and major roads near EV stations
+      inside candidate cells (station_centric scope). Unions and deduplicates preferring station_centric.
+
+    tests:
+      - rowcount_gt_0
+      - not_empty
+
+    columns:
+      - name: region_code
+        description: Region code.
+        tests: [not_null]
+
+      - name: region
+        description: Region name.
+        tests: [not_null]
+
+      - name: h3_r7
+        description: H3 index at resolution 7.
+        tests:
+          - not_null
+          - is_h3_hex
+
+      - name: degurba
+        description: Degree of urbanisation (1/2/3 used for candidate selection).
+        tests:
+          - values_in_or_null:
+              values: [1, 2, 3]
+
+      - name: macro_score
+        description: Macro score used to rank candidates (higher is better).
+
+      - name: traffic_scope
+        description: Scope type - candidate_area or station_centric.
+        tests:
+          - not_null
+          - values_in_or_null:
+              values: ["candidate_area", "station_centric"]
+
+      - name: near_ev_station
+        description: True if road chosen within ev_station_radius_m from an EV station inside candidate cell.
+        tests: [not_null]
+
+      - name: ev_station_id
+        description: EV station feature id (only for station_centric scope).
+
+      - name: road_feature_id
+        description: Road segment feature id (dedup key inside candidate).
+        tests: [not_null]
+
+      - name: road_osm_id
+        description: OSM id.
+
+      - name: highway
+        description: OSM highway tag (major roads only).
+
+      - name: maxspeed_kph
+        description: Max speed (kph), if available.
+        tests:
+          - non_negative
+
+      - name: lanes
+        description: Lanes, if available.
+        tests:
+          - non_negative
+
+      - name: road_len_m
+        description: Road segment length in meters (used for ordering).
+        tests:
+          - non_negative
+
+      - name: road_centroid_wkt_4326
+        description: Road centroid WKT (EPSG:4326).
+        tests:
+          - not_null
+          - wkt_not_empty
+          - wkt_prefix_in:
+              prefixes: ["POINT("]
